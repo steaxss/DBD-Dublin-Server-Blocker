@@ -24,6 +24,12 @@ export interface LogEntry {
 }
 
 export interface ElectronAPI {
+  win: {
+    minimize: () => void
+    maximize: () => void
+    close: () => void
+    isMaximized: () => Promise<boolean>
+  }
   blockRegion: (regionId: string) => Promise<{ ok: boolean; error?: string }>
   unblockRegion: (regionId: string) => Promise<{ ok: boolean; error?: string }>
   blockAll: () => Promise<void>
@@ -33,7 +39,10 @@ export interface ElectronAPI {
   refreshIps: (force: boolean) => Promise<void>
   onLog: (callback: (entry: LogEntry) => void) => () => void
   onStatusChange: (callback: (regionId: string, blocked: boolean) => void) => () => void
+  onCidrCount: (callback: (regionId: string, count: number) => void) => () => void
+  onUnblockAllDone: (callback: () => void) => () => void
   isAdmin: () => Promise<boolean>
+  sendBlockedCount: (count: number) => void
 }
 
 declare global {

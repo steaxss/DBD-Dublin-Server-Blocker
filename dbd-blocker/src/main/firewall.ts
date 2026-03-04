@@ -50,7 +50,7 @@ async function removeRule(regionId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Block a region (2-step creation — mandatory, lesson from original scripts)
+// Block a region (2-step creation — mandatory, lesson from original PS scripts)
 // ---------------------------------------------------------------------------
 
 export async function blockRegion(
@@ -61,21 +61,21 @@ export async function blockRegion(
   const name = ruleName(regionId)
 
   // Step 1 — Preventive cleanup
-  log('step', `[${regionId}] [1/4] Nettoyage préventif...`)
+  log('step', `[${regionId}] [1/4] Preventive cleanup...`)
   if (await ruleExists(regionId)) {
     await removeRule(regionId)
     if (await ruleExists(regionId)) {
-      const err = 'Impossible de supprimer la règle résiduelle'
+      const err = 'Cannot remove residual rule'
       log('error', `[${regionId}] ${err}`)
       return { ok: false, error: err }
     }
-    log('step', `[${regionId}] [1/4] Règle résiduelle supprimée`)
+    log('step', `[${regionId}] [1/4] Residual rule removed`)
   } else {
-    log('step', `[${regionId}] [1/4] OK (aucune règle résiduelle)`)
+    log('step', `[${regionId}] [1/4] OK (no residual rule)`)
   }
 
   // Step 2 — Create base rule without program filter
-  log('step', `[${regionId}] [2/4] Création de la règle de base...`)
+  log('step', `[${regionId}] [2/4] Creating base rule...`)
   const cidrsStr = cidrs.map((c) => `"${c}"`).join(',')
   const createCmd = [
     `New-NetFirewallRule`,
@@ -93,14 +93,14 @@ export async function blockRegion(
   const createResult = await ps(createCmd)
   if (!createResult.ok) {
     await removeRule(regionId)
-    const err = createResult.stderr || 'Échec de création de la règle'
-    log('error', `[${regionId}] [2/4] ÉCHEC — ${err}`)
+    const err = createResult.stderr || 'Failed to create rule'
+    log('error', `[${regionId}] [2/4] FAILED — ${err}`)
     return { ok: false, error: err }
   }
   log('step', `[${regionId}] [2/4] OK`)
 
   // Step 3 — Add program filter (separate step, mandatory)
-  log('step', `[${regionId}] [3/4] Ajout du filtre programme...`)
+  log('step', `[${regionId}] [3/4] Adding program filter...`)
   const programCmd = [
     `Get-NetFirewallRule -DisplayName "${name}"`,
     `| Get-NetFirewallApplicationFilter`,
@@ -110,22 +110,22 @@ export async function blockRegion(
   const programResult = await ps(programCmd)
   if (!programResult.ok) {
     await removeRule(regionId)
-    const err = programResult.stderr || 'Échec du filtre programme'
-    log('error', `[${regionId}] [3/4] ÉCHEC — ${err}`)
+    const err = programResult.stderr || 'Failed to set program filter'
+    log('error', `[${regionId}] [3/4] FAILED — ${err}`)
     return { ok: false, error: err }
   }
   log('step', `[${regionId}] [3/4] OK (DeadByDaylight-Win64-Shipping.exe)`)
 
   // Step 4 — Verify
-  log('step', `[${regionId}] [4/4] Vérification...`)
+  log('step', `[${regionId}] [4/4] Verifying...`)
   if (!(await ruleExists(regionId))) {
     await removeRule(regionId)
-    const err = 'Règle introuvable après création'
-    log('error', `[${regionId}] [4/4] ÉCHEC — ${err}`)
+    const err = 'Rule not found after creation'
+    log('error', `[${regionId}] [4/4] FAILED — ${err}`)
     return { ok: false, error: err }
   }
-  log('success', `[${regionId}] [4/4] OK — règle active`)
-  log('success', `[${regionId}] BLOQUÉ (${cidrs.length} CIDRs)`)
+  log('success', `[${regionId}] [4/4] OK — rule active`)
+  log('success', `[${regionId}] BLOCKED (${cidrs.length} CIDRs)`)
 
   return { ok: true }
 }
@@ -138,7 +138,7 @@ export async function unblockRegion(
   regionId: string,
   log: LogEmitter
 ): Promise<{ ok: boolean; error?: string }> {
-  log('step', `[${regionId}] [1/2] Suppression de la règle...`)
+  log('step', `[${regionId}] [1/2] Removing rule...`)
 
   for (let attempt = 0; attempt < 3; attempt++) {
     await removeRule(regionId)
@@ -147,14 +147,14 @@ export async function unblockRegion(
   }
 
   if (await ruleExists(regionId)) {
-    const err = `Échec après 3 tentatives — supprimez manuellement : ${ruleName(regionId)}`
-    log('error', `[${regionId}] [1/2] ÉCHEC — ${err}`)
+    const err = `Failed after 3 attempts — remove manually: ${ruleName(regionId)}`
+    log('error', `[${regionId}] [1/2] FAILED — ${err}`)
     return { ok: false, error: err }
   }
 
   log('step', `[${regionId}] [1/2] OK`)
-  log('step', `[${regionId}] [2/2] Vérification — aucune règle active`)
-  log('success', `[${regionId}] DÉBLOQUÉ`)
+  log('step', `[${regionId}] [2/2] Verification — no active rule`)
+  log('success', `[${regionId}] UNBLOCKED`)
 
   return { ok: true }
 }
@@ -164,14 +164,14 @@ export async function unblockRegion(
 // ---------------------------------------------------------------------------
 
 export async function unblockAll(regionIds: string[], log: LogEmitter): Promise<void> {
-  log('info', 'Nettoyage — suppression de toutes les règles...')
+  log('info', 'Cleanup — removing all rules...')
   for (const id of regionIds) {
     if (await ruleExists(id)) {
       await removeRule(id)
-      log('step', `[${id}] supprimé`)
+      log('step', `[${id}] removed`)
     }
   }
-  log('info', 'Nettoyage terminé')
+  log('info', 'Cleanup complete')
 }
 
 // ---------------------------------------------------------------------------
