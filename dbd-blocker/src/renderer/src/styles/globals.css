@@ -25,8 +25,7 @@
   .win-btn { -webkit-app-region: no-drag; cursor: default; }
 
   /* Vivid glow effects */
-  .glow-red    { box-shadow: 0 0 24px rgba(239, 68, 68, 0.25), 0 0 48px rgba(239, 68, 68, 0.08); }
-  .glow-violet { box-shadow: 0 0 20px rgba(139, 92, 246, 0.35); }
+  .glow-red    { box-shadow: 0 0 24px rgba(239, 68, 68, 0.30), 0 0 48px rgba(239, 68, 68, 0.12); }
 
   /* Dot grid background */
   .dot-grid {

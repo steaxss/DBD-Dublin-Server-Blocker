@@ -11,7 +11,7 @@ export function Titlebar() {
   return (
     <div className="titlebar-drag flex items-center justify-between h-[32px] min-h-[32px] bg-[#09090f] border-b border-white/[0.05] select-none shrink-0 pl-3 pr-0">
       <div className="flex items-center gap-2 text-[11px] text-zinc-600 truncate">
-        <Shield className="w-3 h-3 shrink-0 text-violet-500" />
+        <Shield className="w-3 h-3 shrink-0 text-red-500" />
         <span className="text-zinc-400 font-semibold tracking-wide">DBD Server Blocker</span>
         <span className="text-zinc-700">·</span>
         <span className="text-zinc-700">v1.0.0</span>

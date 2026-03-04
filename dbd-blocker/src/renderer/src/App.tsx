@@ -34,7 +34,7 @@ export default function App() {
           {/* Header card */}
           <header className="mb-4 rounded-2xl border border-white/[0.08] bg-white/[0.04] backdrop-blur px-5 py-3.5 flex items-center justify-between">
             <div>
-              <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-violet-400 mb-0.5">
+              <div className="text-[10px] uppercase tracking-[0.18em] font-bold text-red-400 mb-0.5">
                 Firewall Manager
               </div>
               <h1 className="text-[15px] font-bold tracking-tight text-white">
@@ -86,7 +86,7 @@ export default function App() {
                 <button
                   onClick={blockAll}
                   disabled={globalLoading}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-violet-600 hover:bg-violet-500 text-white rounded-lg transition-all disabled:opacity-40 hover:glow-violet"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-bold bg-red-600 hover:bg-red-500 text-white rounded-lg transition-all disabled:opacity-40 hover:glow-red"
                 >
                   <ShieldCheck className="w-3 h-3" />
                   Block All
