@@ -13,7 +13,8 @@ Some players experience better ping or prefer to avoid certain regional servers.
 | `Block-DBD-Dublin.ps1` | Creates firewall rule to block Dublin servers |
 | `Unblock-DBD-Dublin.ps1` | Removes the firewall rule |
 | `Verify-DBD-Dublin-Block.ps1` | Checks if the rule is active and configured correctly |
-| `eu-west-1.txt` | AWS eu-west-1 IP ranges (320 IPv4 + 73 IPv6) |
+| `eu-west-1.txt` | AWS eu-west-1 IP ranges (IPv4 only) |
+| `update-ips.py` | Fetches latest AWS IP ranges and updates `eu-west-1.txt` |
 
 ## Requirements
 
@@ -22,6 +23,14 @@ Some players experience better ping or prefer to avoid certain regional servers.
 - PowerShell 5.1+
 
 ## Usage
+
+### Update IP List (recommended before blocking)
+
+AWS IP ranges change over time. Run this first to get the latest list:
+
+```bash
+python update-ips.py
+```
 
 ### Block Dublin Servers
 
@@ -70,6 +79,18 @@ $DBD_EXE_PATH = "C:\Program Files (x86)\Steam\steamapps\common\Dead by Daylight\
 ```powershell
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```
+
+### ERROR creating firewall rule: The system cannot find the file specified
+
+Windows Firewall's policy store is corrupted. Run the following commands in an elevated PowerShell (as Administrator), then restart your PC:
+
+```powershell
+netsh advfirewall reset
+sfc /scannow
+DISM /Online /Cleanup-Image /RestoreHealth
+```
+
+After the restart, run `Block-DBD-Dublin.ps1` again.
 
 ### Can't find any games
 
