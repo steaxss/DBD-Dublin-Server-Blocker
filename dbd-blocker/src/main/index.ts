@@ -33,8 +33,8 @@ function updateTrayTooltip(): void {
   if (!tray) return
   tray.setToolTip(
     blockedCount > 0
-      ? `DBD Blocker — ${blockedCount} région${blockedCount > 1 ? 's' : ''} bloquée${blockedCount > 1 ? 's' : ''}`
-      : 'DBD Blocker — Aucun blocage actif'
+      ? `DBD Blocker — ${blockedCount} region${blockedCount > 1 ? 's' : ''} blocked`
+      : 'DBD Blocker — No active blocks'
   )
 }
 
@@ -42,7 +42,7 @@ function buildTrayMenu(): void {
   if (!tray) return
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Afficher',
+      label: 'Show',
       click: () => {
         mainWindow?.show()
         mainWindow?.focus()
@@ -50,13 +50,13 @@ function buildTrayMenu(): void {
     },
     {
       label: blockedCount > 0
-        ? `${blockedCount} région${blockedCount > 1 ? 's' : ''} bloquée${blockedCount > 1 ? 's' : ''}`
-        : 'Aucun blocage actif',
+        ? `${blockedCount} region${blockedCount > 1 ? 's' : ''} blocked`
+        : 'No active blocks',
       enabled: false
     },
     { type: 'separator' },
     {
-      label: 'Tout débloquer',
+      label: 'Unblock All',
       enabled: blockedCount > 0,
       click: async () => {
         await unblockAll(REGION_IDS, silentLog)
@@ -68,7 +68,7 @@ function buildTrayMenu(): void {
     },
     { type: 'separator' },
     {
-      label: 'Quitter',
+      label: 'Quit',
       click: async () => {
         isQuitting = true
         await unblockAll(REGION_IDS, silentLog)
@@ -102,12 +102,7 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#09090b',
-    titleBarStyle: 'hidden',
-    titleBarOverlay: {
-      color: '#09090b',
-      symbolColor: '#a1a1aa',
-      height: 32
-    },
+    frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -151,6 +146,18 @@ ipcMain.on('blocked-count-update', (_, count: number) => {
   buildTrayMenu()
   updateTrayTooltip()
 })
+
+// Window controls
+ipcMain.on('win:minimize', () => mainWindow?.minimize())
+ipcMain.on('win:maximize', () => {
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize()
+  else mainWindow?.maximize()
+})
+ipcMain.on('win:close', () => {
+  // Close button hides to tray (same as clicking X)
+  mainWindow?.hide()
+})
+ipcMain.handle('win:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
 // ---------------------------------------------------------------------------
 // App lifecycle

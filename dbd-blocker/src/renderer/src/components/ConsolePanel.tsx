@@ -12,7 +12,7 @@ const LEVEL_STYLES: Record<string, string> = {
   success: 'text-emerald-400',
   warning: 'text-amber-400',
   error:   'text-red-400',
-  step:    'text-zinc-500'
+  step:    'text-zinc-600'
 }
 
 const LEVEL_PREFIX: Record<string, string> = {
@@ -20,7 +20,7 @@ const LEVEL_PREFIX: Record<string, string> = {
   success: 'OK   ',
   warning: 'WARN ',
   error:   'ERR  ',
-  step:    '›    '
+  step:    '  ›  '
 }
 
 export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
@@ -28,7 +28,6 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
 
-  // Auto-scroll only if user is near the bottom
   useEffect(() => {
     if (isAtBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -38,23 +37,26 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
   const handleScroll = () => {
     const el = containerRef.current
     if (!el) return
-    const threshold = 60
-    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < threshold
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
   }
 
   return (
-    <div className="shrink-0 border-t border-zinc-800 bg-zinc-950 flex flex-col" style={{ height: '220px' }}>
+    <div
+      className="shrink-0 border-t border-white/[0.06] bg-[#0d0d10] flex flex-col"
+      style={{ height: '200px' }}
+    >
       {/* Console header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-zinc-800">
-        <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <Terminal className="w-3.5 h-3.5" />
-          <span className="font-medium">Console</span>
-          <span className="text-zinc-700">·</span>
-          <span>{logs.length} entrée{logs.length > 1 ? 's' : ''}</span>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase tracking-[0.12em] font-semibold">
+          <Terminal className="w-3 h-3" />
+          Console
+          <span className="text-zinc-700 normal-case tracking-normal font-normal">
+            · {logs.length} {logs.length === 1 ? 'entry' : 'entries'}
+          </span>
         </div>
         <button
           onClick={onClear}
-          className="flex items-center gap-1 px-2 py-1 text-xs text-zinc-600 hover:text-zinc-400 hover:bg-zinc-800 rounded transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-[10px] text-zinc-600 hover:text-zinc-400 hover:bg-white/[0.06] rounded transition-colors"
         >
           <Trash2 className="w-3 h-3" />
           Clear
@@ -65,15 +67,15 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-2 font-mono text-xs space-y-0.5"
+        className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] space-y-0.5"
       >
         {logs.length === 0 ? (
-          <p className="text-zinc-700 italic">Aucun log...</p>
+          <p className="text-zinc-700 italic">No logs yet...</p>
         ) : (
           logs.map((entry) => (
-            <div key={entry.id} className="flex gap-3 leading-5">
+            <div key={entry.id} className="flex gap-3 leading-[1.6]">
               <span className="text-zinc-700 shrink-0 select-none">{entry.timestamp}</span>
-              <span className={`shrink-0 select-none ${LEVEL_STYLES[entry.level] ?? 'text-zinc-400'}`}>
+              <span className={`shrink-0 select-none font-medium ${LEVEL_STYLES[entry.level] ?? 'text-zinc-400'}`}>
                 {LEVEL_PREFIX[entry.level] ?? '     '}
               </span>
               <span className={`${LEVEL_STYLES[entry.level] ?? 'text-zinc-400'} break-all`}>
