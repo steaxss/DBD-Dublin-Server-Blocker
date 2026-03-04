@@ -15,43 +15,43 @@ export function RegionCard({ region, onBlock, onUnblock }: RegionCardProps) {
   return (
     <div
       className={[
-        'relative flex flex-col rounded-xl border p-4 transition-all duration-200 backdrop-blur',
+        'relative flex flex-col rounded-xl border p-3.5 transition-all duration-200',
         isBlocked
-          ? 'bg-red-500/10 border-red-500/30 shadow-[0_4px_20px_rgba(239,68,68,0.1)]'
+          ? 'bg-red-500/[0.08] border-red-500/25 shadow-[0_4px_16px_rgba(239,68,68,0.08)]'
           : isError
-          ? 'bg-amber-500/10 border-amber-500/30'
-          : 'bg-white/5 border-white/10 hover:border-white/20 hover:bg-white/[0.07]'
+          ? 'bg-amber-500/[0.08] border-amber-500/25'
+          : 'bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15] hover:bg-white/[0.06]'
       ].join(' ')}
     >
-      {/* Top row */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2.5">
-          <span className="text-xl leading-none">{region.flag}</span>
+      {/* Flag + name + status dot */}
+      <div className="flex items-start justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="text-lg leading-none">{region.flag}</span>
           <div>
-            <div className="text-sm font-semibold text-zinc-100">{region.name}</div>
-            <div className="text-[11px] text-zinc-500">{region.country}</div>
+            <div className="text-[13px] font-semibold text-zinc-100 leading-tight">{region.name}</div>
+            <div className="text-[10px] text-zinc-500">{region.country}</div>
           </div>
         </div>
-
-        {/* Status dot */}
-        {isLoading ? (
-          <Loader2 className="w-3.5 h-3.5 text-zinc-500 animate-spin mt-0.5" />
-        ) : isBlocked ? (
-          <span className="w-2 h-2 rounded-full bg-red-400 block mt-1 animate-pulse" />
-        ) : isError ? (
-          <AlertCircle className="w-3.5 h-3.5 text-amber-400 mt-0.5" />
-        ) : (
-          <span className="w-2 h-2 rounded-full bg-emerald-400 block mt-1" />
-        )}
+        <div className="mt-0.5 shrink-0">
+          {isLoading ? (
+            <Loader2 className="w-3 h-3 text-zinc-600 animate-spin" />
+          ) : isBlocked ? (
+            <span className="w-1.5 h-1.5 rounded-full bg-red-400 block animate-pulse" />
+          ) : isError ? (
+            <AlertCircle className="w-3 h-3 text-amber-400" />
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/70 block" />
+          )}
+        </div>
       </div>
 
       {/* Region ID + CIDR count */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-1.5 mb-3">
         <code className="text-[10px] text-zinc-600 font-mono">{region.id}</code>
         {region.cidrCount > 0 && (
           <>
-            <span className="text-zinc-700 text-[10px]">·</span>
-            <span className="flex items-center gap-0.5 text-[10px] text-zinc-600">
+            <span className="text-zinc-800">·</span>
+            <span className="flex items-center gap-0.5 text-[10px] text-zinc-700">
               <Server className="w-2.5 h-2.5" />
               {region.cidrCount}
             </span>
@@ -62,25 +62,22 @@ export function RegionCard({ region, onBlock, onUnblock }: RegionCardProps) {
       {/* Status badge */}
       <div className="mb-3">
         {isBlocked ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-red-500/20 text-red-300 border border-red-500/30">
-            <Shield className="w-2.5 h-2.5" />
-            Blocked
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-300/90 border border-red-500/20">
+            <Shield className="w-2.5 h-2.5" /> Blocked
           </span>
         ) : isError ? (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-500/20 text-amber-300 border border-amber-500/30">
-            <AlertCircle className="w-2.5 h-2.5" />
-            Error
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300/90 border border-amber-500/20">
+            <AlertCircle className="w-2.5 h-2.5" /> Error
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-emerald-400 border border-emerald-500/20">
-            ● Active
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-zinc-500 border border-white/[0.07]">
+            ● Not Blocked
           </span>
         )}
       </div>
 
-      {/* Error message */}
       {isError && region.error && (
-        <p className="text-[10px] text-amber-400/80 mb-3 leading-relaxed">{region.error}</p>
+        <p className="text-[10px] text-amber-400/70 mb-2.5 leading-relaxed">{region.error}</p>
       )}
 
       {/* Action button */}
@@ -88,29 +85,20 @@ export function RegionCard({ region, onBlock, onUnblock }: RegionCardProps) {
         onClick={isBlocked ? onUnblock : onBlock}
         disabled={isLoading}
         className={[
-          'mt-auto w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wide transition-all duration-150',
+          'mt-auto w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all',
           isLoading
-            ? 'bg-white/5 text-zinc-600 cursor-not-allowed border border-white/10'
+            ? 'bg-white/[0.04] text-zinc-700 cursor-not-allowed border border-white/[0.06]'
             : isBlocked
-            ? 'bg-white/10 hover:bg-white/15 text-zinc-300 border border-white/15'
-            : 'bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30'
+            ? 'bg-white/[0.08] hover:bg-white/[0.13] text-zinc-300 border border-white/[0.12]'
+            : 'bg-red-500/[0.12] hover:bg-red-500/[0.22] text-red-300/90 border border-red-500/20'
         ].join(' ')}
       >
         {isLoading ? (
-          <>
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Processing...
-          </>
+          <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Processing...</>
         ) : isBlocked ? (
-          <>
-            <ShieldOff className="w-3 h-3" />
-            Unblock
-          </>
+          <><ShieldOff className="w-2.5 h-2.5" /> Unblock</>
         ) : (
-          <>
-            <Shield className="w-3 h-3" />
-            Block
-          </>
+          <><Shield className="w-2.5 h-2.5" /> Block</>
         )}
       </button>
     </div>

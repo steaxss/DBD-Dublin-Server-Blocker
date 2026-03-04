@@ -8,7 +8,28 @@ const DBD_EXE =
 
 export type LogEmitter = (level: string, message: string) => void
 
-export const ruleName = (regionId: string): string => `Block_DBD_${regionId}`
+const REGION_CITIES: Record<string, string> = {
+  'us-east-1':      'Virginia',
+  'us-east-2':      'Ohio',
+  'us-west-1':      'California',
+  'us-west-2':      'Oregon',
+  'ca-central-1':   'Montreal',
+  'eu-central-1':   'Frankfurt',
+  'eu-west-1':      'Dublin',
+  'eu-west-2':      'London',
+  'ap-south-1':     'Mumbai',
+  'ap-east-1':      'HongKong',
+  'ap-northeast-1': 'Tokyo',
+  'ap-northeast-2': 'Seoul',
+  'ap-southeast-1': 'Singapore',
+  'ap-southeast-2': 'Sydney',
+  'sa-east-1':      'SaoPaulo',
+}
+
+export const ruleName = (regionId: string): string => {
+  const city = REGION_CITIES[regionId]
+  return city ? `Block_DBD_${regionId}_${city}` : `Block_DBD_${regionId}`
+}
 
 // ---------------------------------------------------------------------------
 // PowerShell helper
