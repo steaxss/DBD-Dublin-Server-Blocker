@@ -14,7 +14,7 @@ function makeLogEmitter(win: BrowserWindow): LogEmitter {
   return (level: string, message: string) => {
     const entry = {
       id: `${Date.now()}-${Math.random()}`,
-      timestamp: new Date().toLocaleTimeString('fr-FR', { hour12: false }),
+      timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
       level,
       message
     }
@@ -36,11 +36,11 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   // Block a single region
   ipcMain.handle('block-region', async (_, regionId: string) => {
     try {
-      log('info', `Blocage de ${regionId}...`)
+      log('info', `Blocking ${regionId}...`)
       const cidrs = await getCidrs(regionId)
       if (cidrs.length === 0) {
-        log('warning', `${regionId}: aucun CIDR — lancez d'abord un refresh IPs`)
-        return { ok: false, error: 'Aucun CIDR disponible. Lancez un refresh IPs.' }
+        log('warning', `${regionId}: no CIDRs available — run Refresh IPs first`)
+        return { ok: false, error: 'No CIDRs available. Run Refresh IPs first.' }
       }
       const result = await blockRegion(regionId, cidrs, log)
       sendStatus(win, regionId, result.ok)
@@ -55,7 +55,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   // Unblock a single region
   ipcMain.handle('unblock-region', async (_, regionId: string) => {
     try {
-      log('info', `Déblocage de ${regionId}...`)
+      log('info', `Unblocking ${regionId}...`)
       const result = await unblockRegion(regionId, log)
       sendStatus(win, regionId, false)
       return result
@@ -68,12 +68,12 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   // Block all
   ipcMain.handle('block-all', async () => {
-    log('info', 'Blocage de toutes les régions...')
+    log('info', 'Blocking all regions...')
     for (const regionId of REGION_IDS) {
       try {
         const cidrs = await getCidrs(regionId)
         if (cidrs.length === 0) {
-          log('warning', `${regionId}: ignoré (aucun CIDR)`)
+          log('warning', `${regionId}: skipped (no CIDRs)`)
           continue
         }
         const result = await blockRegion(regionId, cidrs, log)
@@ -82,12 +82,12 @@ export function registerIpcHandlers(win: BrowserWindow): void {
         log('error', `[${regionId}] Exception: ${String(err)}`)
       }
     }
-    log('success', 'Block All terminé')
+    log('success', 'Block All complete')
   })
 
   // Unblock all
   ipcMain.handle('unblock-all', async () => {
-    log('info', 'Déblocage de toutes les régions...')
+    log('info', 'Unblocking all regions...')
     for (const regionId of REGION_IDS) {
       try {
         if (await ruleExists(regionId)) {
@@ -98,7 +98,7 @@ export function registerIpcHandlers(win: BrowserWindow): void {
         log('error', `[${regionId}] Exception: ${String(err)}`)
       }
     }
-    log('success', 'Unblock All terminé')
+    log('success', 'Unblock All complete')
   })
 
   // Get current status (on startup)
@@ -113,17 +113,17 @@ export function registerIpcHandlers(win: BrowserWindow): void {
 
   // Refresh IPs
   ipcMain.handle('refresh-ips', async (_, force: boolean) => {
-    log('info', `Récupération des IPs AWS${force ? ' (forcé)' : ''}...`)
+    log('info', `Fetching AWS IP ranges${force ? ' (forced)' : ''}...`)
     for (const regionId of REGION_IDS) {
       try {
         const cidrs = await getCidrs(regionId, force)
         log('step', `${regionId}: ${cidrs.length} CIDRs`)
         win.webContents.send('cidr-count', regionId, cidrs.length)
       } catch (err) {
-        log('error', `${regionId}: échec — ${String(err)}`)
+        log('error', `${regionId}: failed — ${String(err)}`)
       }
     }
-    log('success', 'Refresh IPs terminé')
+    log('success', 'IP refresh complete')
   })
 
   // Admin check

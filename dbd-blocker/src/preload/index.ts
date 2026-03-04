@@ -2,6 +2,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { LogEntry } from '../renderer/src/types'
 
 contextBridge.exposeInMainWorld('api', {
+  // Window controls
+  win: {
+    minimize: () => ipcRenderer.send('win:minimize'),
+    maximize: () => ipcRenderer.send('win:maximize'),
+    close: () => ipcRenderer.send('win:close'),
+    isMaximized: () => ipcRenderer.invoke('win:isMaximized')
+  },
+
   // Firewall
   blockRegion: (regionId: string) => ipcRenderer.invoke('block-region', regionId),
   unblockRegion: (regionId: string) => ipcRenderer.invoke('unblock-region', regionId),

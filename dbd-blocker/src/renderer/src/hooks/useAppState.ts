@@ -45,9 +45,9 @@ export function useAppState() {
       setIsAdmin(admin)
 
       if (!admin) {
-        addLog('error', 'Non-admin : les opérations pare-feu échoueront. Relancez en tant qu\'administrateur.')
+        addLog('error', 'Not running as administrator — firewall operations will fail. Please restart as admin.')
       } else {
-        addLog('info', 'App démarrée (droits administrateur : OK)')
+        addLog('info', 'App started (administrator: OK)')
       }
 
       // Load firewall status
@@ -69,13 +69,13 @@ export function useAppState() {
         .filter(([, v]) => v)
         .map(([k]) => k)
       if (blocked.length > 0) {
-        addLog('warning', `Règles déjà actives au démarrage : ${blocked.join(', ')}`)
+        addLog('warning', `Rules already active at startup: ${blocked.join(', ')}`)
       }
 
       // Fetch IPs for regions with no cache
       const noCachIds = REGIONS.filter((r) => !counts[r.id]).map((r) => r.id)
       if (noCachIds.length > 0) {
-        addLog('info', `Récupération des IPs manquantes (${noCachIds.length} régions)...`)
+        addLog('info', `Fetching missing IP ranges (${noCachIds.length} regions)...`)
         await window.api.refreshIps(false)
         const newCounts = await window.api.getCidrCounts()
         setRegions((prev) =>
@@ -117,7 +117,7 @@ export function useAppState() {
         syncBlockedCount(next)
         return next
       })
-      addLog('success', 'Tout débloqué depuis le tray')
+      addLog('success', 'All regions unblocked from tray')
     })
 
     return () => {
