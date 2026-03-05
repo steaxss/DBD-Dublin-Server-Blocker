@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { Terminal, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import type { LogEntry } from '../types'
 
 interface ConsolePanelProps {
@@ -7,54 +7,51 @@ interface ConsolePanelProps {
   onClear: () => void
 }
 
-const LEVEL_STYLES: Record<string, string> = {
-  info:    'text-zinc-400',
-  success: 'text-emerald-400',
-  warning: 'text-amber-400',
-  error:   'text-red-400',
-  step:    'text-zinc-600'
+const LEVEL_COLOR: Record<string, string> = {
+  info:    'text-white/50',
+  success: 'text-[#32d74b]',
+  warning: 'text-[#ff9f0a]',
+  error:   'text-[#ff453a]',
+  step:    'text-white/25',
 }
 
-const LEVEL_PREFIX: Record<string, string> = {
+const LEVEL_TAG: Record<string, string> = {
   info:    'INFO',
-  success: 'OK  ',
+  success: 'OK',
   warning: 'WARN',
-  error:   'ERR ',
-  step:    ' › '
+  error:   'ERR',
+  step:    '›',
 }
 
 export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const isAtBottomRef = useRef(true)
+  const stickRef     = useRef(true)
 
   useEffect(() => {
-    if (isAtBottomRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    if (stickRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [logs])
 
-  const handleScroll = () => {
+  const onScroll = () => {
     const el = containerRef.current
     if (!el) return
-    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
   }
 
   return (
-    <div
-      className="shrink-0 border-t border-white/[0.05] bg-[#08080e] flex flex-col"
-      style={{ height: '180px' }}
-    >
+    <div className="shrink-0 bg-[#141416] border-t border-white/[0.06] flex flex-col" style={{ height: '168px' }}>
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-white/[0.05]">
+      <div className="flex items-center justify-between px-5 py-2 border-b border-white/[0.05]">
         <div className="flex items-center gap-2">
-          <Terminal className="w-3 h-3 text-violet-500" />
-          <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-zinc-500">Console</span>
-          <span className="text-[10px] text-zinc-700">· {logs.length} {logs.length === 1 ? 'entry' : 'entries'}</span>
+          <span className="text-[12px] font-semibold text-white/50">Console</span>
+          {logs.length > 0 && (
+            <span className="text-[11px] text-white/20 font-mono">{logs.length}</span>
+          )}
         </div>
         <button
           onClick={onClear}
-          className="flex items-center gap-1 px-2 py-1 text-[10px] text-zinc-700 hover:text-zinc-400 hover:bg-white/[0.05] rounded-lg transition-colors"
+          className="flex items-center gap-1 text-[12px] text-white/25 hover:text-white/60 transition-colors"
         >
           <Trash2 className="w-3 h-3" />
           Clear
@@ -64,19 +61,19 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
       {/* Logs */}
       <div
         ref={containerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-2 font-mono text-[11px] space-y-0.5"
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto px-5 py-2.5 space-y-0.5 font-mono"
       >
         {logs.length === 0 ? (
-          <p className="text-zinc-700 italic pt-1">No logs yet...</p>
+          <p className="text-[11px] text-white/15 pt-0.5">No output</p>
         ) : (
           logs.map((entry) => (
-            <div key={entry.id} className="flex gap-3 leading-[1.7]">
-              <span className="text-zinc-700 shrink-0 select-none tabular-nums">{entry.timestamp}</span>
-              <span className={`shrink-0 select-none font-bold w-8 ${LEVEL_STYLES[entry.level] ?? 'text-zinc-400'}`}>
-                {LEVEL_PREFIX[entry.level] ?? '    '}
+            <div key={entry.id} className="flex items-baseline gap-3 text-[11px] leading-[1.8]">
+              <span className="text-white/20 tabular-nums shrink-0">{entry.timestamp}</span>
+              <span className={`font-semibold shrink-0 w-7 ${LEVEL_COLOR[entry.level] ?? 'text-white/40'}`}>
+                {LEVEL_TAG[entry.level] ?? '?'}
               </span>
-              <span className={`${LEVEL_STYLES[entry.level] ?? 'text-zinc-400'} break-all`}>
+              <span className={`break-all ${LEVEL_COLOR[entry.level] ?? 'text-white/40'}`}>
                 {entry.message}
               </span>
             </div>

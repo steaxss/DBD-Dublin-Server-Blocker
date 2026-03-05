@@ -4,13 +4,22 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'SF Mono', 'Menlo', 'monospace'],
       },
-      animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite'
-      }
-    }
+      colors: {
+        apple: {
+          bg:        '#1c1c1e',
+          elevated:  '#2c2c2e',
+          elevated2: '#3a3a3c',
+          fill:      '#48484a',
+          sep:       'rgba(255,255,255,0.12)',
+          red:       '#ff453a',
+          green:     '#32d74b',
+          blue:      '#0a84ff',
+        },
+      },
+    },
   },
-  plugins: []
+  plugins: [],
 }
