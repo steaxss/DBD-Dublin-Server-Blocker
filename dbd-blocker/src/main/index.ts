@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, dialog } from 'electron'
 import { join } from 'path'
 import { unblockAll, getBlockedRegions } from './firewall'
 import { registerIpcHandlers } from './ipc'
@@ -16,6 +16,8 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
 let blockedCount = 0
+
+const isDev = !!process.env.ELECTRON_RENDERER_URL
 
 // ---------------------------------------------------------------------------
 // Log emitter (before window exists)
@@ -69,10 +71,10 @@ function buildTrayMenu(): void {
     { type: 'separator' },
     {
       label: 'Quit',
-      click: async () => {
-        isQuitting = true
-        await unblockAll(REGION_IDS, silentLog)
-        app.quit()
+      click: () => {
+        // Show the main window then trigger close (which has the confirmation dialog)
+        mainWindow?.show()
+        mainWindow?.close()
       }
     }
   ])
@@ -80,7 +82,6 @@ function buildTrayMenu(): void {
 }
 
 function createTray(): void {
-  // Minimal 16x16 transparent PNG as placeholder icon
   const icon = nativeImage.createEmpty()
   tray = new Tray(icon)
   tray.setToolTip('DBD Blocker')
@@ -97,25 +98,43 @@ function createTray(): void {
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 820,
-    minWidth: 900,
-    minHeight: 600,
+    width: 1500,
+    height: 950,
+    minWidth: 1100,
+    minHeight: 700,
     backgroundColor: '#09090b',
     frame: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
+      devTools: isDev,
     }
   })
 
-  // Hide to tray on close (not quit)
-  mainWindow.on('close', (e) => {
-    if (!isQuitting) {
-      e.preventDefault()
-      mainWindow?.hide()
+  // X button or Alt+F4 → show quit confirmation dialog
+  mainWindow.on('close', async (e) => {
+    if (isQuitting) return
+    e.preventDefault()
+
+    const { response } = await dialog.showMessageBox(mainWindow!, {
+      type: 'question',
+      buttons: ['Cancel', 'Quit'],
+      defaultId: 1,
+      cancelId: 0,
+      title: 'DBD Server Blocker',
+      message: 'Are you sure you want to exit?',
+      detail: 'Active firewall rules (excluding permanent ones) will be removed on exit.',
+    })
+
+    if (response === 1) {
+      isQuitting = true
+      const { getPermanentRegions } = await import('./settings')
+      const permanent = await getPermanentRegions()
+      const toUnblock = REGION_IDS.filter(id => !permanent.includes(id))
+      await unblockAll(toUnblock, silentLog)
+      app.quit()
     }
   })
 
@@ -123,13 +142,11 @@ function createWindow(): void {
     mainWindow = null
   })
 
-  // Open external links in browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  // Load renderer
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -138,7 +155,7 @@ function createWindow(): void {
 }
 
 // ---------------------------------------------------------------------------
-// IPC for tray sync
+// IPC for tray sync + window controls
 // ---------------------------------------------------------------------------
 
 ipcMain.on('blocked-count-update', (_, count: number) => {
@@ -147,16 +164,19 @@ ipcMain.on('blocked-count-update', (_, count: number) => {
   updateTrayTooltip()
 })
 
-// Window controls
-ipcMain.on('win:minimize', () => mainWindow?.minimize())
+// Minimize → hide to tray directly
+ipcMain.on('win:minimize', () => mainWindow?.hide())
+
 ipcMain.on('win:maximize', () => {
   if (mainWindow?.isMaximized()) mainWindow.unmaximize()
   else mainWindow?.maximize()
 })
+
 ipcMain.on('win:close', () => {
-  // Close button hides to tray (same as clicking X)
-  mainWindow?.hide()
+  // Trigger the close event handler (which shows the confirmation dialog)
+  mainWindow?.close()
 })
+
 ipcMain.handle('win:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
 // ---------------------------------------------------------------------------
@@ -171,7 +191,6 @@ app.whenReady().then(async () => {
     registerIpcHandlers(mainWindow)
   }
 
-  // Restore state from firewall on startup
   const status = await getBlockedRegions(REGION_IDS)
   blockedCount = Object.values(status).filter(Boolean).length
   buildTrayMenu()
@@ -180,11 +199,14 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   isQuitting = true
-  await unblockAll(REGION_IDS, silentLog)
+  const { getPermanentRegions } = await import('./settings')
+  const permanent = await getPermanentRegions()
+  const toUnblock = REGION_IDS.filter(id => !permanent.includes(id))
+  await unblockAll(toUnblock, silentLog)
 })
 
 app.on('window-all-closed', () => {
-  // On Windows, keep app alive in tray — don't quit
+  // Keep alive in tray on Windows
 })
 
 app.on('activate', () => {
