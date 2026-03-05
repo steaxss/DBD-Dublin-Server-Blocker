@@ -4,6 +4,9 @@ export interface Region {
   country: string
   continent: string
   flag: string
+  countryCode: string
+  lat: number
+  lng: number
 }
 
 export type RegionStatus = 'active' | 'blocked' | 'loading' | 'error'
@@ -12,6 +15,9 @@ export interface RegionState extends Region {
   status: RegionStatus
   cidrCount: number
   error?: string
+  pingMs?: number | null
+  pingIp?: string
+  pingLoading?: boolean
 }
 
 export type LogLevel = 'info' | 'success' | 'warning' | 'error' | 'step'
@@ -23,26 +29,75 @@ export interface LogEntry {
   message: string
 }
 
+export interface InitStep {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'done' | 'error'
+  detail?: string
+}
+
+export interface ExeValidationResult {
+  ok: boolean
+  error?: string
+  warning?: string
+}
+
+export interface PingResult {
+  ok: boolean
+  ip: string | null
+  ms: number | null
+  error?: string
+}
+
+export interface ActiveConnection {
+  ip: string
+  port: number
+  protocol: 'TCP' | 'UDP'
+  regionId: string | null
+}
+
+export interface ActiveConnectionsResult {
+  running: boolean
+  connections: ActiveConnection[]
+}
+
 export interface ElectronAPI {
   win: {
-    minimize: () => void
-    maximize: () => void
-    close: () => void
+    minimize:    () => void
+    maximize:    () => void
+    close:       () => void
     isMaximized: () => Promise<boolean>
   }
-  blockRegion: (regionId: string) => Promise<{ ok: boolean; error?: string }>
+  // Firewall
+  blockRegion:   (regionId: string) => Promise<{ ok: boolean; error?: string }>
   unblockRegion: (regionId: string) => Promise<{ ok: boolean; error?: string }>
-  blockAll: () => Promise<void>
-  unblockAll: () => Promise<void>
-  getStatus: () => Promise<Record<string, boolean>>
+  blockAll:      () => Promise<void>
+  unblockAll:    () => Promise<void>
+  blockExcept:   (keepRegionId: string) => Promise<void>
+  getStatus:     () => Promise<Record<string, boolean>>
   getCidrCounts: () => Promise<Record<string, number>>
-  refreshIps: (force: boolean) => Promise<void>
-  onLog: (callback: (entry: LogEntry) => void) => () => void
-  onStatusChange: (callback: (regionId: string, blocked: boolean) => void) => () => void
-  onCidrCount: (callback: (regionId: string, count: number) => void) => () => void
-  onUnblockAllDone: (callback: () => void) => () => void
-  isAdmin: () => Promise<boolean>
+  refreshIps:    (force: boolean) => Promise<void>
+  isAdmin:       () => Promise<boolean>
+  checkExePath:  () => Promise<ExeValidationResult>
+  // Settings: exe path
+  getExePath:  () => Promise<string>
+  setExePath:  (path: string) => Promise<ExeValidationResult>
+  browseExe:   () => Promise<string | null>
+  // Settings: permanent regions
+  getPermanentRegions: () => Promise<string[]>
+  markPermanent:       (regionId: string) => Promise<void>
+  unmarkPermanent:     (regionId: string) => Promise<void>
+  // Tray sync
   sendBlockedCount: (count: number) => void
+  // Ping
+  pingRegion: (regionId: string) => Promise<PingResult>
+  // Active connections
+  getActiveConnections: () => Promise<ActiveConnectionsResult>
+  // Events
+  onLog:            (callback: (entry: LogEntry) => void) => () => void
+  onStatusChange:   (callback: (regionId: string, blocked: boolean) => void) => () => void
+  onCidrCount:      (callback: (regionId: string, count: number) => void) => () => void
+  onUnblockAllDone: (callback: () => void) => () => void
 }
 
 declare global {

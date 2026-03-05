@@ -1,18 +1,59 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { REGIONS } from '../regions'
-import type { RegionState, LogEntry } from '../types'
+import type { RegionState, LogEntry, ExeValidationResult, InitStep } from '../types'
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+const INIT_STEPS: InitStep[] = [
+  { id: 'admin',    label: 'Verifying administrator privileges', status: 'pending' },
+  { id: 'settings', label: 'Loading application settings',      status: 'pending' },
+  { id: 'ips',      label: 'Fetching AWS IP ranges',            status: 'pending' },
+  { id: 'rules',    label: 'Reading active firewall rules',     status: 'pending' },
+]
+
+const REFRESH_COOLDOWN_MS = 60_000
+
 export function useAppState() {
   const [regions, setRegions] = useState<RegionState[]>(
     REGIONS.map((r) => ({ ...r, status: 'active', cidrCount: 0 }))
   )
-  const [logs, setLogs] = useState<LogEntry[]>([])
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  const [logs, setLogs]                   = useState<LogEntry[]>([])
+  const [isAdmin, setIsAdmin]             = useState<boolean | null>(null)
   const [globalLoading, setGlobalLoading] = useState(false)
+  const [permanentRegions, setPermanentRegions] = useState<string[]>([])
+  const [exclusiveRegion, setExclusiveRegion]   = useState<string | null>(null)
+  const [exePath, setExePathState]        = useState('')
+
+  // Init / splash state
+  const [initDone, setInitDone]     = useState(false)
+  const [initSteps, setInitSteps]   = useState<InitStep[]>(INIT_STEPS)
+  const [needsExeSetup, setNeedsExeSetup] = useState(false)
+
+  // Refresh cooldown
+  const lastRefreshRef = useRef<number>(0)
+  const [refreshCooldown, setRefreshCooldown] = useState(0) // seconds remaining
+  const cooldownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  function startCooldown() {
+    lastRefreshRef.current = Date.now()
+    setRefreshCooldown(60)
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
+    cooldownTimerRef.current = setInterval(() => {
+      const elapsed = Date.now() - lastRefreshRef.current
+      const remaining = Math.ceil((REFRESH_COOLDOWN_MS - elapsed) / 1000)
+      if (remaining <= 0) {
+        setRefreshCooldown(0)
+        if (cooldownTimerRef.current) {
+          clearInterval(cooldownTimerRef.current)
+          cooldownTimerRef.current = null
+        }
+      } else {
+        setRefreshCooldown(remaining)
+      }
+    }, 500)
+  }
 
   const addLog = useCallback((level: LogEntry['level'], message: string) => {
     const entry: LogEntry = {
@@ -38,55 +79,89 @@ export function useAppState() {
     window.api.sendBlockedCount(count)
   }, [])
 
-  // On mount: check admin, load status + CIDR counts
+  // ── Init ───────────────────────────────────────────────────────────────────
   useEffect(() => {
+    function setStep(id: string, updates: Partial<InitStep>) {
+      setInitSteps(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+    }
+
     async function init() {
+      // Step 1 — Admin check
+      setStep('admin', { status: 'running' })
       const admin = await window.api.isAdmin()
       setIsAdmin(admin)
-
       if (!admin) {
         addLog('error', 'Not running as administrator — firewall operations will fail. Please restart as admin.')
+        setStep('admin', { status: 'error', detail: 'No admin' })
       } else {
         addLog('info', 'App started (administrator: OK)')
+        setStep('admin', { status: 'done', detail: 'OK' })
       }
 
-      // Load firewall status
-      const status = await window.api.getStatus()
-      const counts = await window.api.getCidrCounts()
+      // Step 2 — Load settings + validate exe path
+      setStep('settings', { status: 'running' })
+      const [path, permanent] = await Promise.all([
+        window.api.getExePath(),
+        window.api.getPermanentRegions()
+      ])
+      setExePathState(path)
+      setPermanentRegions(permanent)
+      if (permanent.length > 0) {
+        addLog('warning', `Permanent blocks loaded: ${permanent.join(', ')}`)
+      }
+      const exeCheck = await window.api.checkExePath()
+      if (!exeCheck.ok) {
+        setNeedsExeSetup(true)
+        addLog('error', `DBD executable not found — please set the correct path in settings`)
+        setStep('settings', { status: 'error', detail: 'Exe not found' })
+      } else {
+        setStep('settings', { status: 'done' })
+      }
 
+      // Step 3 — Fetch/verify IP ranges
+      setStep('ips', { status: 'running' })
+      const counts = await window.api.getCidrCounts()
+      const noCacheIds = REGIONS.filter(r => !counts[r.id]).map(r => r.id)
+      if (noCacheIds.length > 0) {
+        addLog('info', `Fetching missing IP ranges (${noCacheIds.length} regions)...`)
+        await window.api.refreshIps(false)
+        startCooldown()
+        const newCounts = await window.api.getCidrCounts()
+        setRegions(prev => prev.map(r => ({ ...r, cidrCount: newCounts[r.id] ?? 0 })))
+        setStep('ips', { status: 'done', detail: `${REGIONS.length} regions` })
+      } else {
+        setRegions(prev => prev.map(r => ({ ...r, cidrCount: counts[r.id] ?? 0 })))
+        setStep('ips', { status: 'done', detail: 'cached' })
+      }
+
+      // Step 4 — Read active firewall rules
+      setStep('rules', { status: 'running' })
+      const status = await window.api.getStatus()
       setRegions((prev) => {
         const next = prev.map((r) => ({
           ...r,
           status: status[r.id] ? ('blocked' as const) : ('active' as const),
-          cidrCount: counts[r.id] ?? 0
         }))
         syncBlockedCount(next)
         return next
       })
-
-      // Log which are already blocked
-      const blocked = Object.entries(status)
-        .filter(([, v]) => v)
-        .map(([k]) => k)
+      const blocked = Object.entries(status).filter(([, v]) => v).map(([k]) => k)
       if (blocked.length > 0) {
         addLog('warning', `Rules already active at startup: ${blocked.join(', ')}`)
       }
+      setStep('rules', { status: 'done', detail: `${blocked.length} blocked` })
 
-      // Fetch IPs for regions with no cache
-      const noCachIds = REGIONS.filter((r) => !counts[r.id]).map((r) => r.id)
-      if (noCachIds.length > 0) {
-        addLog('info', `Fetching missing IP ranges (${noCachIds.length} regions)...`)
-        await window.api.refreshIps(false)
-        const newCounts = await window.api.getCidrCounts()
-        setRegions((prev) =>
-          prev.map((r) => ({ ...r, cidrCount: newCounts[r.id] ?? r.cidrCount }))
-        )
-      }
+      setInitDone(true)
     }
+
     init()
+
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current)
+    }
   }, [addLog, syncBlockedCount])
 
-  // Listen to events from main process
+  // ── Events from main process ───────────────────────────────────────────────
   useEffect(() => {
     const unsubLog = window.api.onLog((entry) => {
       setLogs((prev) => {
@@ -128,7 +203,7 @@ export function useAppState() {
     }
   }, [addLog, syncBlockedCount])
 
-  // Actions
+  // ── Firewall actions ───────────────────────────────────────────────────────
   const blockRegion = useCallback(async (regionId: string) => {
     setRegionStatus(regionId, { status: 'loading', error: undefined })
     const result = await window.api.blockRegion(regionId)
@@ -165,22 +240,115 @@ export function useAppState() {
     setGlobalLoading(true)
     setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
     await window.api.blockAll()
+    setRegions((prev) => {
+      const next = prev.map((r) =>
+        r.status === 'loading' ? { ...r, status: 'active' as const } : r
+      )
+      syncBlockedCount(next)
+      return next
+    })
     setGlobalLoading(false)
-  }, [])
+  }, [syncBlockedCount])
 
   const unblockAll = useCallback(async () => {
     setGlobalLoading(true)
     setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
     await window.api.unblockAll()
+    setRegions((prev) => {
+      const next = prev.map((r) => ({ ...r, status: 'active' as const }))
+      syncBlockedCount(next)
+      return next
+    })
     setGlobalLoading(false)
-  }, [])
+  }, [syncBlockedCount])
 
   const refreshIps = useCallback(async () => {
-    addLog('info', 'Refresh IPs forcé...')
+    const elapsed = Date.now() - lastRefreshRef.current
+    if (elapsed < REFRESH_COOLDOWN_MS && lastRefreshRef.current > 0) {
+      const remaining = Math.ceil((REFRESH_COOLDOWN_MS - elapsed) / 1000)
+      addLog('warning', `Refresh on cooldown — please wait ${remaining}s`)
+      return
+    }
+    addLog('info', 'Refreshing IP ranges...')
+    startCooldown()
     await window.api.refreshIps(true)
     const counts = await window.api.getCidrCounts()
     setRegions((prev) => prev.map((r) => ({ ...r, cidrCount: counts[r.id] ?? r.cidrCount })))
   }, [addLog])
+
+  // ── Exclusive mode ─────────────────────────────────────────────────────────
+  const activateExclusive = useCallback(async (keepRegionId: string) => {
+    setGlobalLoading(true)
+    setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
+    setExclusiveRegion(keepRegionId)
+    await window.api.blockExcept(keepRegionId)
+    setGlobalLoading(false)
+  }, [])
+
+  const deactivateExclusive = useCallback(async () => {
+    setExclusiveRegion(null)
+    setGlobalLoading(true)
+    setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
+    await window.api.unblockAll()
+    setRegions((prev) => {
+      const next = prev.map((r) => ({ ...r, status: 'active' as const }))
+      syncBlockedCount(next)
+      return next
+    })
+    setGlobalLoading(false)
+  }, [syncBlockedCount])
+
+  // ── Permanent regions ──────────────────────────────────────────────────────
+  const markRegionPermanent = useCallback(async (regionId: string) => {
+    await window.api.markPermanent(regionId)
+    setPermanentRegions((prev) =>
+      prev.includes(regionId) ? prev : [...prev, regionId]
+    )
+  }, [])
+
+  const unmarkRegionPermanent = useCallback(async (regionId: string) => {
+    await window.api.unmarkPermanent(regionId)
+    setPermanentRegions((prev) => prev.filter(id => id !== regionId))
+  }, [])
+
+  // ── Exe path ───────────────────────────────────────────────────────────────
+  const updateExePath = useCallback(async (path: string): Promise<ExeValidationResult> => {
+    const result = await window.api.setExePath(path)
+    if (result.ok) setExePathState(path)
+    return result
+  }, [])
+
+  const browseExe = useCallback(async (): Promise<string | null> => {
+    return window.api.browseExe()
+  }, [])
+
+  // ── Ping ───────────────────────────────────────────────────────────────────
+  const pingRegion = useCallback(async (regionId: string) => {
+    setRegionStatus(regionId, { pingLoading: true, pingMs: undefined, pingIp: undefined })
+    const result = await window.api.pingRegion(regionId)
+    setRegionStatus(regionId, {
+      pingLoading: false,
+      pingMs: result.ms,
+      pingIp: result.ip ?? undefined,
+    })
+    if (!result.ok) {
+      addLog('warning', `[${regionId}] Ping failed: ${result.error ?? 'no CIDRs cached'}`)
+    }
+  }, [setRegionStatus, addLog])
+
+  const pingAll = useCallback(async () => {
+    setRegions(prev => prev.map(r => ({ ...r, pingLoading: true, pingMs: undefined, pingIp: undefined })))
+    const promises = REGIONS.map(async (r) => {
+      const result = await window.api.pingRegion(r.id)
+      setRegionStatus(r.id, {
+        pingLoading: false,
+        pingMs: result.ms,
+        pingIp: result.ip ?? undefined,
+      })
+    })
+    await Promise.all(promises)
+    addLog('info', 'Ping All complete')
+  }, [setRegionStatus, addLog])
 
   const clearLogs = useCallback(() => setLogs([]), [])
 
@@ -192,11 +360,26 @@ export function useAppState() {
     isAdmin,
     globalLoading,
     blockedCount,
+    permanentRegions,
+    exclusiveRegion,
+    exePath,
+    initDone,
+    initSteps,
+    needsExeSetup,
+    refreshCooldown,
     blockRegion,
     unblockRegion,
     blockAll,
     unblockAll,
     refreshIps,
+    activateExclusive,
+    deactivateExclusive,
+    markRegionPermanent,
+    unmarkRegionPermanent,
+    updateExePath,
+    browseExe,
+    pingRegion,
+    pingAll,
     clearLogs
   }
 }

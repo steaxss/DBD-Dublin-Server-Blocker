@@ -4,21 +4,42 @@ import type { LogEntry } from '../renderer/src/types'
 contextBridge.exposeInMainWorld('api', {
   // Window controls
   win: {
-    minimize: () => ipcRenderer.send('win:minimize'),
-    maximize: () => ipcRenderer.send('win:maximize'),
-    close: () => ipcRenderer.send('win:close'),
+    minimize:    () => ipcRenderer.send('win:minimize'),
+    maximize:    () => ipcRenderer.send('win:maximize'),
+    close:       () => ipcRenderer.send('win:close'),
     isMaximized: () => ipcRenderer.invoke('win:isMaximized')
   },
 
   // Firewall
-  blockRegion: (regionId: string) => ipcRenderer.invoke('block-region', regionId),
+  blockRegion:   (regionId: string) => ipcRenderer.invoke('block-region', regionId),
   unblockRegion: (regionId: string) => ipcRenderer.invoke('unblock-region', regionId),
-  blockAll: () => ipcRenderer.invoke('block-all'),
-  unblockAll: () => ipcRenderer.invoke('unblock-all'),
-  getStatus: () => ipcRenderer.invoke('get-status'),
+  blockAll:      () => ipcRenderer.invoke('block-all'),
+  unblockAll:    () => ipcRenderer.invoke('unblock-all'),
+  blockExcept:   (keepRegionId: string) => ipcRenderer.invoke('block-except', keepRegionId),
+  getStatus:     () => ipcRenderer.invoke('get-status'),
   getCidrCounts: () => ipcRenderer.invoke('get-cidr-counts'),
-  refreshIps: (force: boolean) => ipcRenderer.invoke('refresh-ips', force),
-  isAdmin: () => ipcRenderer.invoke('is-admin'),
+  refreshIps:    (force: boolean) => ipcRenderer.invoke('refresh-ips', force),
+  isAdmin:       () => ipcRenderer.invoke('is-admin'),
+  checkExePath:  () => ipcRenderer.invoke('check-exe-path'),
+
+  // Settings: exe path
+  getExePath:  () => ipcRenderer.invoke('get-exe-path'),
+  setExePath:  (path: string) => ipcRenderer.invoke('set-exe-path', path),
+  browseExe:   () => ipcRenderer.invoke('browse-exe'),
+
+  // Settings: permanent regions
+  getPermanentRegions: () => ipcRenderer.invoke('get-permanent-regions'),
+  markPermanent:       (regionId: string) => ipcRenderer.invoke('mark-permanent', regionId),
+  unmarkPermanent:     (regionId: string) => ipcRenderer.invoke('unmark-permanent', regionId),
+
+  // Ping
+  pingRegion: (regionId: string) => ipcRenderer.invoke('ping-region', regionId),
+
+  // Active connections
+  getActiveConnections: () => ipcRenderer.invoke('get-active-connections'),
+
+  // Tray sync
+  sendBlockedCount: (count: number) => ipcRenderer.send('blocked-count-update', count),
 
   // Events: main → renderer
   onLog: (callback: (entry: LogEntry) => void) => {
@@ -27,20 +48,17 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('log', handler)
   },
   onStatusChange: (callback: (regionId: string, blocked: boolean) => void) => {
-    const handler = (_: unknown, regionId: string, blocked: boolean) =>
-      callback(regionId, blocked)
+    const handler = (_: unknown, regionId: string, blocked: boolean) => callback(regionId, blocked)
     ipcRenderer.on('status-change', handler)
     return () => ipcRenderer.removeListener('status-change', handler)
   },
   onCidrCount: (callback: (regionId: string, count: number) => void) => {
-    const handler = (_: unknown, regionId: string, count: number) =>
-      callback(regionId, count)
+    const handler = (_: unknown, regionId: string, count: number) => callback(regionId, count)
     ipcRenderer.on('cidr-count', handler)
     return () => ipcRenderer.removeListener('cidr-count', handler)
   },
   onUnblockAllDone: (callback: () => void) => {
     ipcRenderer.on('unblock-all-done', callback)
     return () => ipcRenderer.removeListener('unblock-all-done', callback)
-  },
-  sendBlockedCount: (count: number) => ipcRenderer.send('blocked-count-update', count)
+  }
 })
