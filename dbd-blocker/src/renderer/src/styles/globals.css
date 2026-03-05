@@ -8,28 +8,48 @@
   html, body, #root { height: 100%; overflow: hidden; }
 
   body {
-    font-family: Inter, system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
-    background-color: #080810;
-    color: #f1f1f5;
+    -moz-osx-font-smoothing: grayscale;
+    background: #1c1c1e;
+    color: #ffffff;
   }
 
-  ::-webkit-scrollbar { width: 3px; height: 3px; }
+  ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 999px; }
-  ::-webkit-scrollbar-thumb:hover { background: #3a3a50; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 }
 
 @layer utilities {
   .titlebar-drag { -webkit-app-region: drag; }
   .win-btn { -webkit-app-region: no-drag; cursor: default; }
 
-  /* Vivid glow effects */
-  .glow-red    { box-shadow: 0 0 24px rgba(239, 68, 68, 0.30), 0 0 48px rgba(239, 68, 68, 0.12); }
-
-  /* Dot grid background */
-  .dot-grid {
-    background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
-    background-size: 24px 24px;
+  /* Apple vibrancy simulation */
+  .vibrancy {
+    background: rgba(28, 28, 30, 0.85);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
   }
+
+  /* Apple card */
+  .apple-card {
+    background: #2c2c2e;
+    border-radius: 12px;
+  }
+
+  /* Apple red button */
+  .btn-red {
+    background: #ff453a;
+    color: #fff;
+    border-radius: 8px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    transition: all 0.15s ease;
+  }
+  .btn-red:hover { background: #ff6961; }
+  .btn-red:active { transform: scale(0.97); }
+
+  /* Subtle separator */
+  .sep { background: rgba(255,255,255,0.10); }
 }
