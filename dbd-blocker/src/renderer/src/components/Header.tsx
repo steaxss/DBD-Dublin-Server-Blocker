@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Shield } from 'lucide-react'
 
 export function Titlebar() {
   const [isMaximized, setIsMaximized] = useState(false)
@@ -9,38 +8,45 @@ export function Titlebar() {
   }, [])
 
   return (
-    <div className="titlebar-drag flex items-center justify-between h-[32px] min-h-[32px] bg-[#09090f] border-b border-white/[0.05] select-none shrink-0 pl-3 pr-0">
-      <div className="flex items-center gap-2 text-[11px] text-zinc-600 truncate">
-        <Shield className="w-3 h-3 shrink-0 text-red-500" />
-        <span className="text-zinc-400 font-semibold tracking-wide">DBD Server Blocker</span>
-        <span className="text-zinc-700">·</span>
-        <span className="text-zinc-700">v1.0.0</span>
-      </div>
+    <div className="titlebar-drag flex items-center justify-between h-[38px] min-h-[38px] select-none shrink-0 px-4 vibrancy border-b border-white/[0.06]">
+      {/* App title */}
+      <span className="text-[13px] font-semibold text-white/80 tracking-[-0.01em]">
+        DBD Server Blocker
+      </span>
 
-      <div className="flex items-center h-full">
-        <button onClick={() => window.api.win.minimize()}
-          className="win-btn h-full w-[46px] flex items-center justify-center text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300 transition-colors">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-            <rect x="1" y="5.5" width="10" height="1" rx="0.5" fill="currentColor" />
+      {/* Window controls */}
+      <div className="flex items-center gap-1.5">
+        {/* Minimize */}
+        <button
+          onClick={() => window.api.win.minimize()}
+          className="win-btn group w-3 h-3 rounded-full bg-[#ffbd2e] hover:bg-[#ffaa00] flex items-center justify-center transition-colors"
+        >
+          <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="1" viewBox="0 0 6 1" fill="#7d5a00">
+            <rect width="6" height="1" rx="0.5" />
           </svg>
         </button>
-        <button onClick={() => { window.api.win.maximize(); setIsMaximized(v => !v) }}
-          className="win-btn h-full w-[46px] flex items-center justify-center text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300 transition-colors">
+        {/* Maximize */}
+        <button
+          onClick={() => { window.api.win.maximize(); setIsMaximized(v => !v) }}
+          className="win-btn group w-3 h-3 rounded-full bg-[#28c840] hover:bg-[#1aaa2e] flex items-center justify-center transition-colors"
+        >
           {isMaximized ? (
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <rect x="2.5" y="3.5" width="6" height="6" rx="0.6" stroke="currentColor" strokeWidth="1" fill="none" />
-              <path d="M3.5 3.5V2.2a.6.6 0 0 1 .6-.6h5.2a.6.6 0 0 1 .6.6v5.2a.6.6 0 0 1-.6.6H8.5" stroke="currentColor" strokeWidth="1" fill="none" />
+            <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="#0a4a14">
+              <path d="M1 5L5 1M2 1H5V4" stroke="currentColor" strokeWidth="1" fill="none" />
             </svg>
           ) : (
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <rect x="1.5" y="1.5" width="9" height="9" rx="0.6" stroke="currentColor" strokeWidth="1.1" fill="none" />
+            <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="#0a4a14">
+              <path d="M1 5L5 1M1 2V5H4" stroke="currentColor" strokeWidth="1" fill="none" />
             </svg>
           )}
         </button>
-        <button onClick={() => window.api.win.close()}
-          className="win-btn h-full w-[46px] flex items-center justify-center text-zinc-600 hover:bg-[#c42b1c] hover:text-white transition-colors">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-            <path d="M1.5 1.5l9 9M10.5 1.5l-9 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+        {/* Close */}
+        <button
+          onClick={() => window.api.win.close()}
+          className="win-btn group w-3 h-3 rounded-full bg-[#ff5f57] hover:bg-[#e04040] flex items-center justify-center transition-colors"
+        >
+          <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="none">
+            <path d="M1 1l4 4M5 1L1 5" stroke="#6e0a07" strokeWidth="1" strokeLinecap="round" />
           </svg>
         </button>
       </div>

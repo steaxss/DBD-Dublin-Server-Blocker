@@ -12,27 +12,26 @@ export function RegionGrid({ regions, onBlock, onUnblock }: RegionGridProps) {
   const regionMap = new Map(regions.map((r) => [r.id, r]))
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-6">
       {regionsByContinent.map(({ continent, regions: contRegions }) => {
-        const blockedInContinent = contRegions.filter(r => regionMap.get(r.id)?.status === 'blocked').length
+        const blockedCount = contRegions.filter(r => regionMap.get(r.id)?.status === 'blocked').length
 
         return (
-          <section
-            key={continent}
-            className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden"
-          >
+          <section key={continent}>
             {/* Section header */}
-            <div className="px-4 py-2.5 border-b border-white/[0.05] flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+            <div className="flex items-center justify-between mb-2 px-0.5">
+              <span className="text-[11px] font-semibold text-white/40 uppercase tracking-[0.08em]">
                 {continent}
               </span>
-              <span className={`text-[10px] font-semibold tabular-nums ${blockedInContinent > 0 ? 'text-red-500/70' : 'text-zinc-700'}`}>
-                {blockedInContinent}/{contRegions.length} blocked
-              </span>
+              {blockedCount > 0 && (
+                <span className="text-[11px] font-medium text-[#ff453a]">
+                  {blockedCount} blocked
+                </span>
+              )}
             </div>
 
             {/* Cards */}
-            <div className="p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
               {contRegions.map((r) => {
                 const state = regionMap.get(r.id)
                 if (!state) return null
