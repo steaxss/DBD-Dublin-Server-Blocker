@@ -1,0 +1,529 @@
+import 'leaflet/dist/leaflet.css'
+import { useState, useMemo, useCallback, useRef } from 'react'
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import L from 'leaflet'
+import { Shield, ShieldOff, MousePointerClick, Target, X, Wifi } from 'lucide-react'
+import { REGIONS } from '../regions'
+import { FlagIcon } from './FlagIcon'
+import type { RegionState } from '../types'
+
+const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
+function makeIcon(status: string, isPermanent: boolean, isSelected: boolean, isExclusive: boolean): L.DivIcon {
+  const blocked = status === 'blocked'
+  const loading  = status === 'loading'
+
+  const dotColor = isExclusive                ? '#B579FF'
+                 : isPermanent && blocked     ? '#FF9800'
+                 : blocked                   ? '#F44336'
+                 : loading                   ? 'rgba(255,255,255,0.3)'
+                 :                             '#44FF41'
+
+  const glow = isExclusive                ? 'rgba(181,121,255,0.75)'
+             : isPermanent && blocked     ? 'rgba(255,152,0,0.75)'
+             : blocked                   ? 'rgba(244,67,54,0.75)'
+             : loading                   ? 'rgba(255,255,255,0.15)'
+             :                             'rgba(68,255,65,0.75)'
+
+  const s = isSelected || isExclusive ? 20 : 12
+  const border = isSelected
+    ? '2px solid rgba(181,121,255,0.95)'
+    : isExclusive
+    ? '2px solid rgba(181,121,255,0.7)'
+    : '1.5px solid rgba(255,255,255,0.35)'
+  const outerRing = isSelected || isExclusive
+    ? `, 0 0 0 4px rgba(181,121,255,0.18), 0 0 0 8px rgba(181,121,255,0.07)`
+    : ''
+
+  return L.divIcon({
+    html: `<div style="width:${s}px;height:${s}px;border-radius:50%;background:${dotColor};border:${border};box-shadow:0 0 ${s + 4}px ${glow}${outerRing};cursor:pointer;transition:all 0.15s ease"></div>`,
+    className: '',
+    iconSize:   [s, s],
+    iconAnchor: [s / 2, s / 2],
+    tooltipAnchor: [s / 2 + 4, 0],
+  })
+}
+
+interface MapViewProps {
+  regions:              RegionState[]
+  permanentRegions:     string[]
+  exclusiveRegion:      string | null
+  isSelectingExclusive: boolean
+  onBlock:              (id: string) => void
+  onUnblock:            (id: string) => void
+  onActivateExclusive:  (id: string) => void
+  onDeactivateExclusive: () => void
+  onPingRegion:         (id: string) => void
+  globalLoading:        boolean
+}
+
+export function MapView({
+  regions,
+  permanentRegions,
+  exclusiveRegion,
+  isSelectingExclusive,
+  onBlock,
+  onUnblock,
+  onActivateExclusive,
+  onDeactivateExclusive,
+  onPingRegion,
+  globalLoading,
+}: MapViewProps) {
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const mapDivRef = useRef<HTMLDivElement>(null)
+
+  const toggle = useCallback((id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+
+  const handleMarkerClick = useCallback((id: string) => {
+    if (isSelectingExclusive) {
+      onActivateExclusive(id)
+    } else {
+      toggle(id)
+    }
+  }, [isSelectingExclusive, onActivateExclusive, toggle])
+
+  const regionMap = useMemo(() => new Map(regions.map(r => [r.id, r])), [regions])
+
+  const blockedCount  = regions.filter(r => r.status === 'blocked').length
+  const selectedCount = selected.size
+
+  function handleBlockSelected() {
+    for (const id of selected) {
+      const r = regionMap.get(id)
+      if (r && r.status !== 'blocked' && r.status !== 'loading') onBlock(id)
+    }
+  }
+
+  function handleUnblockSelected() {
+    for (const id of selected) {
+      const r = regionMap.get(id)
+      if (r && r.status === 'blocked') onUnblock(id)
+    }
+  }
+
+  function pingColor(region: RegionState) {
+    if (region.pingMs === undefined) return 'rgba(255,255,255,0.25)'
+    if (region.pingMs === null) return '#F44336'
+    if (region.pingMs < 80) return '#44FF41'
+    if (region.pingMs < 150) return '#FF9800'
+    return '#F44336'
+  }
+
+  function pingLabel(region: RegionState) {
+    if (region.pingLoading) return '...'
+    if (region.pingMs === undefined) return null
+    if (region.pingMs === null) return 'T/O'
+    return `${region.pingMs}ms`
+  }
+
+  return (
+    <div className="flex h-full">
+
+      {/* ── Map ── */}
+      <div ref={mapDivRef} className="flex-1 relative" onMouseLeave={() => setHoveredRegion(null)}>
+        <MapContainer
+          center={[20, 15]}
+          zoom={2}
+          minZoom={2}
+          style={{ height: '100%', width: '100%', background: '#0a0a0a' }}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          <TileLayer
+            url={DARK_TILES}
+            attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+          />
+
+          {REGIONS.map(region => {
+            const state    = regionMap.get(region.id)
+            if (!state) return null
+            const isPerm   = permanentRegions.includes(region.id)
+            const isSel    = selected.has(region.id)
+            const isExcl   = exclusiveRegion === region.id
+
+            const statusColor = isExcl ? '#B579FF' : state.status === 'blocked' ? (isPerm ? '#FF9800' : '#F44336') : '#44FF41'
+            const statusLabel = isExcl ? 'Exclusive Mode' : isPerm && state.status === 'blocked' ? 'Permanent Block' : state.status.toUpperCase()
+
+            return (
+              <Marker
+                key={`${region.id}-${state.status}-${isPerm}-${isSel}-${isExcl}`}
+                position={[region.lat, region.lng]}
+                icon={makeIcon(state.status, isPerm, isSel, isExcl)}
+                eventHandlers={{
+                  click: () => handleMarkerClick(region.id),
+                  mouseover: (e) => {
+                    const rect = mapDivRef.current?.getBoundingClientRect()
+                    if (rect) {
+                      setTooltipPos({
+                        x: rect.left + e.containerPoint.x,
+                        y: rect.top  + e.containerPoint.y,
+                      })
+                    }
+                    setHoveredRegion(region.id)
+                  },
+                  mouseout: () => setHoveredRegion(null),
+                }}
+              >
+                {/* Click popup — full detail */}
+                {!isSelectingExclusive && (
+                  <Popup autoPan={false} minWidth={210} maxWidth={260}>
+                    <div style={{ padding: '14px 16px 12px', fontFamily: 'Poppins, sans-serif' }}>
+                      {/* Server ID */}
+                      <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fontWeight: 800, color: 'rgba(181,121,255,0.9)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
+                        {region.id}
+                      </div>
+
+                      {/* Flag + city + country */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                        <FlagIcon code={region.countryCode} style={{ width: 34, height: 'auto', borderRadius: 4, display: 'block', flexShrink: 0 }} fallback={region.flag} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', lineHeight: 1.2 }}>{region.name}</div>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{region.country}</div>
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, boxShadow: `0 0 6px ${statusColor}`, flexShrink: 0 }} />
+                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: statusColor }}>
+                          {statusLabel}
+                        </span>
+                        {state.cidrCount > 0 && (
+                          <span style={{ marginLeft: 'auto', fontSize: 9, fontFamily: 'monospace', color: 'rgba(255,255,255,0.2)' }}>
+                            {state.cidrCount} CIDRs
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Ping result */}
+                      {state.pingMs !== undefined && (
+                        <div style={{ fontSize: 11, fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: pingColor(state), marginBottom: 8 }}>
+                          Ping: {state.pingMs === null ? 'Timeout' : `${state.pingMs}ms`}
+                        </div>
+                      )}
+
+                      {/* Action buttons */}
+                      <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                        {/* Block / Unblock */}
+                        {state.status === 'blocked' ? (
+                          <button
+                            onClick={() => { onUnblock(region.id) }}
+                            style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: 700, fontFamily: 'Poppins, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer' }}
+                          >
+                            Unblock
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => { onBlock(region.id) }}
+                            style={{ flex: 1, padding: '6px 0', borderRadius: 8, border: '1px solid rgba(244,67,54,0.4)', background: 'linear-gradient(135deg, rgba(244,67,54,0.18) 0%, rgba(198,40,40,0.18) 100%)', color: '#F44336', fontSize: 10, fontWeight: 700, fontFamily: 'Poppins, sans-serif', textTransform: 'uppercase', letterSpacing: '0.08em', cursor: 'pointer' }}
+                          >
+                            Block
+                          </button>
+                        )}
+
+                        {/* Ping button */}
+                        <button
+                          onClick={() => onPingRegion(region.id)}
+                          disabled={state.pingLoading}
+                          style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: state.pingLoading ? 'rgba(255,255,255,0.2)' : pingColor(state), fontSize: 10, fontWeight: 700, fontFamily: 'Poppins, sans-serif', textTransform: 'uppercase', letterSpacing: '0.06em', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                          {state.pingLoading ? '...' : 'Ping'}
+                        </button>
+                      </div>
+                    </div>
+                  </Popup>
+                )}
+              </Marker>
+            )
+          })}
+        </MapContainer>
+
+        {/* Custom hover tooltip — React overlay, position fixed above marker */}
+        {hoveredRegion && (() => {
+          const hr = REGIONS.find(r => r.id === hoveredRegion)
+          if (!hr) return null
+          return (
+            <div
+              style={{
+                position: 'fixed',
+                left: tooltipPos.x,
+                top: tooltipPos.y - 18,
+                transform: 'translate(-50%, -100%)',
+                zIndex: 10000,
+                pointerEvents: 'none',
+                background: 'rgba(12,12,12,0.97)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 10,
+                padding: '8px 12px',
+                boxShadow: '0 6px 24px rgba(0,0,0,0.7)',
+                fontFamily: 'Poppins, sans-serif',
+                minWidth: 160,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                <FlagIcon
+                  code={hr.countryCode}
+                  style={{ width: 22, height: 'auto', borderRadius: 3, display: 'block', flexShrink: 0 }}
+                  fallback={hr.flag}
+                />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', lineHeight: 1.2 }}>{hr.name}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{hr.country}</div>
+                </div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 10, color: 'rgba(181,121,255,0.85)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {hr.id}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Map legend */}
+        <div
+          className="absolute bottom-4 left-4 z-[400] flex flex-col gap-1.5 px-3 py-2.5 rounded-xl"
+          style={{ background: 'rgba(10,10,10,0.92)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}
+        >
+          {[
+            { color: '#44FF41',  label: 'Open' },
+            { color: '#F44336',  label: 'Blocked' },
+            { color: '#FF9800',  label: 'Permanent' },
+            { color: '#B579FF',  label: 'Exclusive' },
+          ].map(({ color, label }) => (
+            <div key={label} className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+              <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Exclusive selection banner */}
+        {isSelectingExclusive && (
+          <div
+            className="absolute top-3 left-1/2 -translate-x-1/2 z-[400] flex items-center gap-2 px-4 py-2 rounded-full"
+            style={{ background: 'rgba(181,121,255,0.15)', border: '1px solid rgba(181,121,255,0.4)', backdropFilter: 'blur(8px)' }}
+          >
+            <Target className="w-3.5 h-3.5" style={{ color: '#B579FF' }} />
+            <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#B579FF' }}>
+              Click a server to activate Exclusive Mode
+            </span>
+          </div>
+        )}
+
+        {/* Click hint (when not selecting exclusive) */}
+        {selectedCount === 0 && !isSelectingExclusive && (
+          <div
+            className="absolute top-4 left-1/2 -translate-x-1/2 z-[400] flex items-center gap-2 px-3 py-1.5 rounded-full"
+            style={{ background: 'rgba(10,10,10,0.85)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}
+          >
+            <MousePointerClick className="w-3 h-3 text-white/30" />
+            <span className="text-[10px] font-semibold text-white/30 uppercase tracking-wider">Click markers to select</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Sidebar ── */}
+      <div
+        className="w-[272px] shrink-0 flex flex-col"
+        style={{ background: 'rgba(12,12,12,0.98)', borderLeft: '1px solid rgba(255,255,255,0.06)' }}
+      >
+        {/* Header */}
+        <div className="px-4 pt-4 pb-3 border-b border-white/[0.05]">
+          <div className="gradient-title text-[11px] font-bold uppercase tracking-[0.14em] mb-1">
+            Server Map
+          </div>
+          <div className="text-[11px] text-white/35">
+            <span style={{ color: '#F44336' }}>{blockedCount}</span> blocked
+            {' · '}
+            <span style={{ color: '#44FF41' }}>{regions.length - blockedCount}</span> open
+          </div>
+        </div>
+
+        {/* Exclusive mode active banner in sidebar */}
+        {exclusiveRegion && (
+          <div
+            className="px-4 py-2.5 flex items-center gap-2"
+            style={{ background: 'rgba(181,121,255,0.08)', borderBottom: '1px solid rgba(181,121,255,0.15)' }}
+          >
+            <Target className="w-3 h-3 shrink-0" style={{ color: '#B579FF' }} />
+            <div className="flex-1 min-w-0">
+              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#B579FF' }}>Exclusive Mode</div>
+              <div className="text-[10px] text-white/40 truncate">{REGIONS.find(r => r.id === exclusiveRegion)?.name}</div>
+            </div>
+            <button
+              onClick={onDeactivateExclusive}
+              className="shrink-0 w-5 h-5 flex items-center justify-center rounded-md transition-colors hover:bg-white/10"
+              style={{ color: 'rgba(181,121,255,0.6)' }}
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Selection bar */}
+        <div className="px-4 py-2.5 border-b border-white/[0.05] flex items-center justify-between">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+            {isSelectingExclusive
+              ? 'Click server to select'
+              : selectedCount > 0
+              ? `${selectedCount} selected`
+              : 'None selected'}
+          </span>
+          <div className="flex items-center gap-1">
+            {selectedCount > 0 && !isSelectingExclusive && (
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors hover:text-white/60"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                Clear
+              </button>
+            )}
+            {!isSelectingExclusive && (
+              <button
+                onClick={() => setSelected(new Set(REGIONS.map(r => r.id)))}
+                className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded transition-colors hover:text-white/60"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)', border: '1px solid rgba(255,255,255,0.08)' }}
+              >
+                All
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Region list */}
+        <div className="flex-1 overflow-y-auto">
+          {REGIONS.map(region => {
+            const state     = regionMap.get(region.id)
+            const isSel     = selected.has(region.id)
+            const isPerm    = permanentRegions.includes(region.id)
+            const isExcl    = exclusiveRegion === region.id
+            const isBlocked = state?.status === 'blocked'
+            const dotColor  = isExcl ? '#B579FF' : isPerm && isBlocked ? '#FF9800' : isBlocked ? '#F44336' : '#44FF41'
+            const ping      = pingLabel(state!)
+
+            return (
+              <button
+                key={region.id}
+                onClick={() => {
+                  if (isSelectingExclusive) onActivateExclusive(region.id)
+                  else toggle(region.id)
+                }}
+                className="w-full flex items-center gap-2.5 px-4 py-2 text-left transition-all duration-100"
+                style={{
+                  background:   isExcl ? 'rgba(181,121,255,0.1)' : isSel ? 'rgba(181,121,255,0.07)' : 'transparent',
+                  borderBottom: '1px solid rgba(255,255,255,0.03)',
+                  borderLeft:   `2px solid ${isExcl ? 'rgba(181,121,255,0.7)' : isSel ? 'rgba(181,121,255,0.55)' : 'transparent'}`,
+                }}
+                onMouseEnter={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'rgba(255,255,255,0.025)' }}
+                onMouseLeave={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'transparent' }}
+              >
+                {/* Checkbox or exclusive icon */}
+                {isExcl ? (
+                  <Target className="shrink-0 w-3.5 h-3.5" style={{ color: '#B579FF' }} />
+                ) : (
+                  <div
+                    className="shrink-0 w-3.5 h-3.5 rounded flex items-center justify-center"
+                    style={{
+                      border:     `1.5px solid ${isSel ? 'rgba(181,121,255,0.7)' : 'rgba(255,255,255,0.18)'}`,
+                      background: isSel ? 'rgba(181,121,255,0.2)' : 'transparent',
+                    }}
+                  >
+                    {isSel && <div style={{ width: 5, height: 5, borderRadius: 1, background: '#B579FF' }} />}
+                  </div>
+                )}
+
+                {/* Flag (SVG) */}
+                <FlagIcon
+                  code={region.countryCode}
+                  style={{ width: 18, height: 'auto', borderRadius: 2, display: 'block', flexShrink: 0 }}
+                  fallback={region.flag}
+                />
+
+                {/* Name + id */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-white/75 truncate uppercase tracking-wide">
+                    {region.name}
+                  </div>
+                  <div className="text-[9px] font-bold text-white/22 uppercase tracking-wider truncate">
+                    {region.id}
+                  </div>
+                </div>
+
+                {/* Ping result + status dot */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {ping && (
+                    <span
+                      className="text-[9px] font-bold"
+                      style={{ color: state ? pingColor(state) : 'rgba(255,255,255,0.25)' }}
+                    >
+                      {ping}
+                    </span>
+                  )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onPingRegion(region.id) }}
+                    disabled={state?.pingLoading}
+                    className="w-4 h-4 flex items-center justify-center rounded transition-colors hover:text-white/60 disabled:opacity-30"
+                    style={{ color: 'rgba(255,255,255,0.2)' }}
+                    title="Ping server"
+                  >
+                    <Wifi className="w-2.5 h-2.5" />
+                  </button>
+                  {isPerm && isBlocked && (
+                    <span className="text-[8px] font-bold px-1 py-px rounded" style={{ background: 'rgba(255,152,0,0.12)', color: '#FF9800' }}>P</span>
+                  )}
+                  <div
+                    className="w-2 h-2 rounded-full"
+                    style={{ background: dotColor, boxShadow: `0 0 5px ${dotColor}` }}
+                  />
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Action footer */}
+        <div
+          className="p-3 space-y-2"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <button
+            onClick={handleBlockSelected}
+            disabled={selectedCount === 0 || globalLoading || isSelectingExclusive}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all duration-150 disabled:opacity-25"
+            style={{
+              background: 'linear-gradient(135deg, #F44336 0%, #C62828 100%)',
+              color:      '#fff',
+              border:     '1px solid rgba(244,67,54,0.35)',
+              boxShadow:  selectedCount > 0 ? '0 4px 12px rgba(244,67,54,0.25)' : 'none',
+            }}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            Block{selectedCount > 0 ? ` (${selectedCount})` : ''}
+          </button>
+
+          <button
+            onClick={handleUnblockSelected}
+            disabled={selectedCount === 0 || globalLoading || isSelectingExclusive}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[11px] font-bold uppercase tracking-widest transition-all duration-150 disabled:opacity-25"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              color:      'rgba(255,255,255,0.65)',
+              border:     '1px solid rgba(255,255,255,0.12)',
+            }}
+          >
+            <ShieldOff className="w-3.5 h-3.5" />
+            Unblock{selectedCount > 0 ? ` (${selectedCount})` : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

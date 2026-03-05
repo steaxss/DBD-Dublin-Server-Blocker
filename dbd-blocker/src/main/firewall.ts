@@ -1,10 +1,8 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { getExePath } from './settings'
 
 const execFileAsync = promisify(execFile)
-
-const DBD_EXE =
-  'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Dead by Daylight\\DeadByDaylight\\Binaries\\Win64\\DeadByDaylight-Win64-Shipping.exe'
 
 export type LogEmitter = (level: string, message: string) => void
 
@@ -35,7 +33,7 @@ export const ruleName = (regionId: string): string => {
 // PowerShell helper
 // ---------------------------------------------------------------------------
 
-async function ps(command: string): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+export async function ps(command: string): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   try {
     const { stdout, stderr } = await execFileAsync(
       'powershell',
@@ -122,10 +120,11 @@ export async function blockRegion(
 
   // Step 3 — Add program filter (separate step, mandatory)
   log('step', `[${regionId}] [3/4] Adding program filter...`)
+  const exePath = await getExePath()
   const programCmd = [
     `Get-NetFirewallRule -DisplayName "${name}"`,
     `| Get-NetFirewallApplicationFilter`,
-    `| Set-NetFirewallApplicationFilter -Program "${DBD_EXE}" -ErrorAction Stop`
+    `| Set-NetFirewallApplicationFilter -Program "${exePath}" -ErrorAction Stop`
   ].join(' ')
 
   const programResult = await ps(programCmd)

@@ -8,45 +8,46 @@ export function Titlebar() {
   }, [])
 
   return (
-    <div className="titlebar-drag flex items-center justify-between h-[38px] min-h-[38px] select-none shrink-0 px-4 vibrancy border-b border-white/[0.06]">
-      {/* App title */}
-      <span className="text-[13px] font-semibold text-white/80 tracking-[-0.01em]">
-        DBD Server Blocker
-      </span>
+    <div className="titlebar-drag flex items-center h-8 shrink-0 bg-[#0a0a0a] border-b border-white/[0.06] select-none">
+      {/* Drag region */}
+      <div className="flex-1" />
 
-      {/* Window controls */}
-      <div className="flex items-center gap-1.5">
+      {/* Window controls — Windows style */}
+      <div className="flex h-full no-drag">
         {/* Minimize */}
         <button
           onClick={() => window.api.win.minimize()}
-          className="win-btn group w-3 h-3 rounded-full bg-[#ffbd2e] hover:bg-[#ffaa00] flex items-center justify-center transition-colors"
+          className="w-[46px] h-full flex items-center justify-center text-white/60 hover:bg-white/[0.08] hover:text-white transition-colors cursor-default"
         >
-          <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="1" viewBox="0 0 6 1" fill="#7d5a00">
-            <rect width="6" height="1" rx="0.5" />
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <rect x="2" y="6" width="8" height="1" fill="currentColor" />
           </svg>
         </button>
-        {/* Maximize */}
+
+        {/* Maximize / Restore */}
         <button
           onClick={() => { window.api.win.maximize(); setIsMaximized(v => !v) }}
-          className="win-btn group w-3 h-3 rounded-full bg-[#28c840] hover:bg-[#1aaa2e] flex items-center justify-center transition-colors"
+          className="w-[46px] h-full flex items-center justify-center text-white/60 hover:bg-white/[0.08] hover:text-white transition-colors cursor-default"
         >
           {isMaximized ? (
-            <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="#0a4a14">
-              <path d="M1 5L5 1M2 1H5V4" stroke="currentColor" strokeWidth="1" fill="none" />
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              <rect x="3.5" y="1" width="7" height="7" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1" />
+              <rect x="1.5" y="3" width="7" height="7" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1" />
             </svg>
           ) : (
-            <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="#0a4a14">
-              <path d="M1 5L5 1M1 2V5H4" stroke="currentColor" strokeWidth="1" fill="none" />
+            <svg width="12" height="12" viewBox="0 0 12 12">
+              <rect x="2" y="2" width="8" height="8" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1" />
             </svg>
           )}
         </button>
-        {/* Close */}
+
+        {/* Close — red on hover */}
         <button
           onClick={() => window.api.win.close()}
-          className="win-btn group w-3 h-3 rounded-full bg-[#ff5f57] hover:bg-[#e04040] flex items-center justify-center transition-colors"
+          className="w-[46px] h-full flex items-center justify-center text-white/60 hover:bg-[#F44336]/90 hover:text-white transition-colors cursor-default"
         >
-          <svg className="opacity-0 group-hover:opacity-100 transition-opacity" width="6" height="6" viewBox="0 0 6 6" fill="none">
-            <path d="M1 1l4 4M5 1L1 5" stroke="#6e0a07" strokeWidth="1" strokeLinecap="round" />
+          <svg width="12" height="12" viewBox="0 0 12 12">
+            <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </button>
       </div>
