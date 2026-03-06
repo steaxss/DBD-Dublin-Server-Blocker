@@ -130,9 +130,14 @@ function createWindow(): void {
 
     if (response === 1) {
       isQuitting = true
-      const { getPermanentRegions } = await import('./settings')
-      const permanent = await getPermanentRegions()
-      const toUnblock = REGION_IDS.filter(id => !permanent.includes(id))
+      const { getPermanentRegions, getExclusiveRegion } = await import('./settings')
+      const [permanent, exclusive] = await Promise.all([getPermanentRegions(), getExclusiveRegion()])
+      const protected_ = new Set(permanent)
+      // If exclusive mode is saved, the regions blocked by it must persist too
+      if (exclusive) {
+        REGION_IDS.filter(id => id !== exclusive).forEach(id => protected_.add(id))
+      }
+      const toUnblock = REGION_IDS.filter(id => !protected_.has(id))
       await unblockAll(toUnblock, silentLog)
       app.quit()
     }
@@ -199,9 +204,13 @@ app.whenReady().then(async () => {
 
 app.on('before-quit', async () => {
   isQuitting = true
-  const { getPermanentRegions } = await import('./settings')
-  const permanent = await getPermanentRegions()
-  const toUnblock = REGION_IDS.filter(id => !permanent.includes(id))
+  const { getPermanentRegions, getExclusiveRegion } = await import('./settings')
+  const [permanent, exclusive] = await Promise.all([getPermanentRegions(), getExclusiveRegion()])
+  const protected_ = new Set(permanent)
+  if (exclusive) {
+    REGION_IDS.filter(id => id !== exclusive).forEach(id => protected_.add(id))
+  }
+  const toUnblock = REGION_IDS.filter(id => !protected_.has(id))
   await unblockAll(toUnblock, silentLog)
 })
 

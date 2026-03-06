@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { REGIONS } from '../regions'
-import type { RegionState, LogEntry, ExeValidationResult, InitStep } from '../types'
+import type { RegionState, LogEntry, ExeValidationResult, InitStep, UpdateInfo } from '../types'
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -24,7 +24,9 @@ export function useAppState() {
   const [globalLoading, setGlobalLoading] = useState(false)
   const [permanentRegions, setPermanentRegions] = useState<string[]>([])
   const [exclusiveRegion, setExclusiveRegion]   = useState<string | null>(null)
+  const [isExclusiveSaved, setIsExclusiveSaved] = useState(false)
   const [exePath, setExePathState]        = useState('')
+  const [updateInfo, setUpdateInfo]       = useState<UpdateInfo | null>(null)
 
   // Init / splash state
   const [initDone, setInitDone]     = useState(false)
@@ -100,14 +102,20 @@ export function useAppState() {
 
       // Step 2 — Load settings + validate exe path
       setStep('settings', { status: 'running' })
-      const [path, permanent] = await Promise.all([
+      const [path, permanent, savedExclusive] = await Promise.all([
         window.api.getExePath(),
-        window.api.getPermanentRegions()
+        window.api.getPermanentRegions(),
+        window.api.getExclusiveRegion()
       ])
       setExePathState(path)
       setPermanentRegions(permanent)
       if (permanent.length > 0) {
         addLog('warning', `Permanent blocks loaded: ${permanent.join(', ')}`)
+      }
+      if (savedExclusive) {
+        setExclusiveRegion(savedExclusive)
+        setIsExclusiveSaved(true)
+        addLog('warning', `Exclusive mode restored: ${savedExclusive}`)
       }
       const exeCheck = await window.api.checkExePath()
       if (!exeCheck.ok) {
@@ -152,6 +160,11 @@ export function useAppState() {
       setStep('rules', { status: 'done', detail: `${blocked.length} blocked` })
 
       setInitDone(true)
+
+      // Check for update in background (non-blocking)
+      window.api.checkForUpdate().then(info => {
+        if (info.available) setUpdateInfo(info)
+      }).catch(() => { /* ignore */ })
     }
 
     init()
@@ -236,20 +249,6 @@ export function useAppState() {
     }
   }, [setRegionStatus, syncBlockedCount])
 
-  const blockAll = useCallback(async () => {
-    setGlobalLoading(true)
-    setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
-    await window.api.blockAll()
-    setRegions((prev) => {
-      const next = prev.map((r) =>
-        r.status === 'loading' ? { ...r, status: 'active' as const } : r
-      )
-      syncBlockedCount(next)
-      return next
-    })
-    setGlobalLoading(false)
-  }, [syncBlockedCount])
-
   const unblockAll = useCallback(async () => {
     setGlobalLoading(true)
     setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
@@ -287,6 +286,8 @@ export function useAppState() {
 
   const deactivateExclusive = useCallback(async () => {
     setExclusiveRegion(null)
+    setIsExclusiveSaved(false)
+    await window.api.setExclusiveRegion(null)
     setGlobalLoading(true)
     setRegions((prev) => prev.map((r) => ({ ...r, status: 'loading' as const })))
     await window.api.unblockAll()
@@ -297,6 +298,17 @@ export function useAppState() {
     })
     setGlobalLoading(false)
   }, [syncBlockedCount])
+
+  const saveExclusive = useCallback(async () => {
+    if (!exclusiveRegion) return
+    await window.api.setExclusiveRegion(exclusiveRegion)
+    setIsExclusiveSaved(true)
+  }, [exclusiveRegion])
+
+  const unsaveExclusive = useCallback(async () => {
+    await window.api.setExclusiveRegion(null)
+    setIsExclusiveSaved(false)
+  }, [])
 
   // ── Permanent regions ──────────────────────────────────────────────────────
   const markRegionPermanent = useCallback(async (regionId: string) => {
@@ -362,6 +374,8 @@ export function useAppState() {
     blockedCount,
     permanentRegions,
     exclusiveRegion,
+    isExclusiveSaved,
+    updateInfo,
     exePath,
     initDone,
     initSteps,
@@ -369,11 +383,12 @@ export function useAppState() {
     refreshCooldown,
     blockRegion,
     unblockRegion,
-    blockAll,
     unblockAll,
     refreshIps,
     activateExclusive,
     deactivateExclusive,
+    saveExclusive,
+    unsaveExclusive,
     markRegionPermanent,
     unmarkRegionPermanent,
     updateExePath,
