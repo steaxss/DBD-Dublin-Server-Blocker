@@ -430,6 +430,52 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     }
   })
 
+  // ── Server status from deadbyqueue API ────────────────────────────────────
+  ipcMain.handle('get-server-status', async () => {
+    try {
+      const { default: https } = await import('https')
+
+      function fetchJson(url: string): Promise<unknown> {
+        return new Promise((resolve, reject) => {
+          const req = https.get(url, { timeout: 8000 }, (res) => {
+            let data = ''
+            res.on('data', (chunk) => (data += chunk))
+            res.on('end', () => {
+              try { resolve(JSON.parse(data)) }
+              catch { reject(new Error('Invalid JSON')) }
+            })
+          })
+          req.on('error', reject)
+          req.on('timeout', () => { req.destroy(); reject(new Error('Timeout')) })
+        })
+      }
+
+      const [regionsData, queuesData] = await Promise.all([
+        fetchJson('https://api2.deadbyqueue.com/regions'),
+        fetchJson('https://api2.deadbyqueue.com/queues'),
+      ])
+
+      const onlineMap = (regionsData as any).regions as Record<string, boolean>
+      const liveQueues = ((queuesData as any).queues?.live ?? {}) as Record<
+        string,
+        { killer: { time: string }; survivor: { time: string } }
+      >
+
+      const result: Record<string, { online: boolean; killerQueue: string | null; survivorQueue: string | null }> = {}
+      const allIds = new Set([...Object.keys(onlineMap), ...Object.keys(liveQueues)])
+      for (const id of allIds) {
+        result[id] = {
+          online:        onlineMap[id] ?? false,
+          killerQueue:   liveQueues[id]?.killer?.time   ?? null,
+          survivorQueue: liveQueues[id]?.survivor?.time ?? null,
+        }
+      }
+      return { ok: true, data: result }
+    } catch {
+      return { ok: false, data: {} }
+    }
+  })
+
   // ── Auto-update: check GitHub releases ─────────────────────────────────────
   ipcMain.handle('check-for-update', async () => {
     try {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { REGIONS } from '../regions'
-import type { RegionState, LogEntry, ExeValidationResult, InitStep, UpdateInfo } from '../types'
+import type { RegionState, LogEntry, ExeValidationResult, InitStep, UpdateInfo, ServerStatusMap } from '../types'
 
 function makeId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -27,6 +27,7 @@ export function useAppState() {
   const [isExclusiveSaved, setIsExclusiveSaved] = useState(false)
   const [exePath, setExePathState]        = useState('')
   const [updateInfo, setUpdateInfo]       = useState<UpdateInfo | null>(null)
+  const [serverStatus, setServerStatus]   = useState<ServerStatusMap>({})
 
   // Init / splash state
   const [initDone, setInitDone]     = useState(false)
@@ -165,6 +166,11 @@ export function useAppState() {
       window.api.checkForUpdate().then(info => {
         if (info.available) setUpdateInfo(info)
       }).catch(() => { /* ignore */ })
+
+      // Fetch server status (non-blocking)
+      window.api.getServerStatus().then(res => {
+        if (res.ok) setServerStatus(res.data)
+      }).catch(() => { /* ignore */ })
     }
 
     init()
@@ -215,6 +221,15 @@ export function useAppState() {
       unsubUnblockAll?.()
     }
   }, [addLog, syncBlockedCount])
+
+  // ── Server status auto-refresh (every 20 min) ─────────────────────────────
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const res = await window.api.getServerStatus().catch(() => null)
+      if (res?.ok) setServerStatus(res.data)
+    }, 20 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
 
   // ── Firewall actions ───────────────────────────────────────────────────────
   const blockRegion = useCallback(async (regionId: string) => {
@@ -376,6 +391,7 @@ export function useAppState() {
     exclusiveRegion,
     isExclusiveSaved,
     updateInfo,
+    serverStatus,
     exePath,
     initDone,
     initSteps,

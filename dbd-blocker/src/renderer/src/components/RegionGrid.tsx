@@ -1,12 +1,13 @@
 import { regionsByContinent } from '../regions'
 import { RegionCard } from './RegionCard'
-import type { RegionState } from '../types'
+import type { RegionState, ServerStatusMap } from '../types'
 
 interface RegionGridProps {
   regions: RegionState[]
   permanentRegions: string[]
   exclusiveRegion: string | null
   isSelectingExclusive: boolean
+  serverStatus: ServerStatusMap
   onBlock: (regionId: string) => void
   onUnblock: (regionId: string) => void
   onMarkPermanent: (regionId: string) => void
@@ -20,6 +21,7 @@ export function RegionGrid({
   permanentRegions,
   exclusiveRegion,
   isSelectingExclusive,
+  serverStatus,
   onBlock,
   onUnblock,
   onMarkPermanent,
@@ -56,7 +58,7 @@ export function RegionGrid({
             </div>
 
             {/* Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {contRegions.map((r) => {
                 const state = regionMap.get(r.id)
                 if (!state) return null
@@ -67,6 +69,7 @@ export function RegionGrid({
                     isPermanent={permanentRegions.includes(r.id)}
                     isExclusive={exclusiveRegion === r.id}
                     isSelectingExclusive={isSelectingExclusive}
+                    serverInfo={serverStatus[r.id]}
                     onBlock={() => onBlock(r.id)}
                     onUnblock={() => onUnblock(r.id)}
                     onMarkPermanent={() => onMarkPermanent(r.id)}

@@ -7,6 +7,7 @@ export interface Region {
   countryCode: string
   lat: number
   lng: number
+  timezone: string
 }
 
 export type RegionStatus = 'active' | 'blocked' | 'loading' | 'error'
@@ -65,6 +66,19 @@ export interface UpdateInfo {
   url: string
 }
 
+export interface ServerInfo {
+  online: boolean
+  killerQueue: string | null
+  survivorQueue: string | null
+}
+
+export type ServerStatusMap = Record<string, ServerInfo>
+
+export interface ServerStatusResult {
+  ok: boolean
+  data: ServerStatusMap
+}
+
 export interface ElectronAPI {
   win: {
     minimize:    () => void
@@ -102,6 +116,8 @@ export interface ElectronAPI {
   resetUdpMonitor:      () => Promise<void>
   // Auto-update
   checkForUpdate: () => Promise<UpdateInfo>
+  // Server status (deadbyqueue)
+  getServerStatus: () => Promise<ServerStatusResult>
   // Events
   onLog:            (callback: (entry: LogEntry) => void) => () => void
   onStatusChange:   (callback: (regionId: string, blocked: boolean) => void) => () => void
