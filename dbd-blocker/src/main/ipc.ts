@@ -19,6 +19,16 @@ import {
 
 export type LogEmitter = (level: string, message: string) => void
 
+// ── UDP monitor state (persists across polls) ──────────────────────────────
+const WFP_GUID = '{0CCE9226-69AE-11D9-BED3-505054503030}'
+const udpMonitor = {
+  dbdRunning:       false,
+  auditWasEnabled:  false,
+  regionMap:        new Map<string, string>(), // ip → regionId
+  lastPollMs:       0,
+  loggedSecErr:     false,
+}
+
 function makeLogEmitter(win: BrowserWindow): LogEmitter {
   return (level: string, message: string) => {
     const entry = {
@@ -260,78 +270,154 @@ export function registerIpcHandlers(win: BrowserWindow): void {
     return { ok: true, ip: host, ms: avg }
   })
 
-  // ── Get active DBD connections ─────────────────────────────────────────────
+  // ── Get active DBD UDP connections (automatic, no user interaction) ────────
+  //
+  // Uses Windows Security Event 5156 (WFP ALE permit) which fires at the FIRST
+  // layer of the WFP stack — before any VPN/ExitLag/GPN redirect callout.
+  // GUID-based auditpol subcategory to work on any Windows locale.
+  //
   ipcMain.handle('get-active-connections', async () => {
     // 1. Find DBD PID
     const pidRes = await ps(
       `(Get-Process -Name 'DeadByDaylight-Win64-Shipping' -ErrorAction SilentlyContinue).Id`
     )
     const pid = parseInt(pidRes.stdout.trim(), 10)
-    if (!pid || isNaN(pid)) return { running: false, connections: [] }
+    const isRunning = !isNaN(pid) && pid > 0
 
-    // 2. Get TCP established connections
-    const tcpRes = await ps(
-      `Get-NetTCPConnection -OwningProcess ${pid} -State Established -ErrorAction SilentlyContinue ` +
-      `| Where-Object { $_.RemoteAddress -notmatch '^(127\\.|::1|0\\.0\\.0\\.0)' } ` +
-      `| Select-Object @{N='ip';E={$_.RemoteAddress}},@{N='port';E={$_.RemotePort}} ` +
-      `| ConvertTo-Json -Compress -ErrorAction SilentlyContinue`
-    )
-
-    let rawConns: Array<{ ip: string; port: number }> = []
-    try {
-      const parsed = JSON.parse(tcpRes.stdout.trim())
-      rawConns = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : [])
-    } catch { /* no connections or parse error */ }
-
-    // 3. Load all cached CIDRs and build region lookup
-    const regionIds = [
-      'us-east-1','us-east-2','us-west-1','us-west-2','ca-central-1',
-      'eu-central-1','eu-west-1','eu-west-2',
-      'ap-south-1','ap-east-1','ap-northeast-1','ap-northeast-2',
-      'ap-southeast-1','ap-southeast-2','sa-east-1',
-    ]
-    const regionCidrs: Array<{ regionId: string; cidrs: string[] }> = []
-    for (const regionId of regionIds) {
-      const cidrs = await getCachedCidrs(regionId)
-      if (cidrs) regionCidrs.push({ regionId, cidrs })
-    }
-
-    function ipToInt(ip: string): number {
-      return ip.split('.').reduce((acc, oct) => ((acc << 8) | parseInt(oct, 10)) >>> 0, 0)
-    }
-    function ipInCidr(ip: string, cidr: string): boolean {
-      const [network, bits] = cidr.split('/')
-      const prefix = parseInt(bits, 10)
-      if (prefix === 0) return true
-      const mask = (0xFFFFFFFF << (32 - prefix)) >>> 0
-      return (ipToInt(ip) & mask) === (ipToInt(network) & mask)
-    }
-    function findRegion(ip: string): string | null {
-      for (const { regionId, cidrs } of regionCidrs) {
-        for (const cidr of cidrs) {
-          if (ipInCidr(ip, cidr)) return regionId
+    if (!isRunning) {
+      if (udpMonitor.dbdRunning) {
+        // DBD just stopped — restore audit state and clear accumulated data
+        udpMonitor.dbdRunning = false
+        udpMonitor.regionMap.clear()
+        if (!udpMonitor.auditWasEnabled) {
+          await ps(`auditpol /set /subcategory:"${WFP_GUID}" /success:disable`)
+          log('info', '[UDP] DBD stopped — WFP audit disabled')
+        } else {
+          log('info', '[UDP] DBD stopped — WFP audit preserved (was already active)')
         }
       }
-      return null
+      return { running: false, udpRegions: [] }
     }
 
-    // 4. Annotate connections with region
-    const seen = new Set<string>()
-    const connections = rawConns
-      .filter(c => {
-        const key = `${c.ip}:${c.port}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
-      .map(c => ({
-        ip: c.ip,
-        port: c.port,
-        protocol: 'TCP' as const,
-        regionId: findRegion(c.ip),
-      }))
+    // 2. DBD just started — enable audit monitoring
+    if (!udpMonitor.dbdRunning) {
+      udpMonitor.dbdRunning = true
+      udpMonitor.regionMap.clear()
+      log('info', `[UDP] DBD detected (PID: ${pid}) — configuring WFP audit...`)
 
-    return { running: true, connections }
+      // Check if WFP audit was already enabled (language-independent GUID)
+      const checkRes = await ps(
+        `((auditpol /get /subcategory:"${WFP_GUID}" 2>&1) -join ' ') -match 'Success'`
+      )
+      udpMonitor.auditWasEnabled = checkRes.stdout.trim().toLowerCase() === 'true'
+
+      if (!udpMonitor.auditWasEnabled) {
+        const enableRes = await ps(
+          `auditpol /set /subcategory:"${WFP_GUID}" /success:enable 2>&1`
+        )
+        if (enableRes.stdout.toLowerCase().includes('success') || enableRes.ok) {
+          log('info', '[UDP] WFP audit enabled — Security Event 5156 active')
+        } else {
+          log('warning', `[UDP] WFP audit enable failed: ${enableRes.stdout || enableRes.stderr}`)
+        }
+      } else {
+        log('info', '[UDP] WFP audit already active')
+      }
+
+      // On first poll look back 10s to catch connections made just before app opened
+      udpMonitor.lastPollMs = Date.now() - 10000
+    }
+
+    // 3. Query Security log for new 5156 UDP events from DBD since last poll
+    //    Properties: [0]=ProcessId [1]=Application [2]=Direction [3]=SrcAddr [4]=SrcPort
+    //                [5]=DestAddr [6]=DestPort [7]=Protocol (17=UDP)
+    const sinceMs = udpMonitor.lastPollMs - 1000 // 1s overlap to avoid missing events
+    udpMonitor.lastPollMs = Date.now()
+
+    const evtRes = await ps(
+      `$since = [DateTimeOffset]::FromUnixTimeMilliseconds(${sinceMs}).LocalDateTime; ` +
+      `$dbdPid = ${pid}; ` +
+      `$ips = [System.Collections.Generic.HashSet[string]]::new(); ` +
+      `$err = $null; ` +
+      `try { ` +
+        `Get-WinEvent -FilterHashtable @{ LogName='Security'; Id=5156; StartTime=$since } ` +
+        `-ErrorAction Stop | ` +
+        `Where-Object { [string]$_.Properties[0].Value -eq [string]$dbdPid -and $_.Properties[7].Value -eq 17 } | ` +
+        `ForEach-Object { ` +
+        `  $dst = [string]$_.Properties[5].Value; ` +
+        `  if ($dst -and $dst -notmatch '^(127\\.|10\\.|192\\.168\\.|172\\.(1[6-9]|2[0-9]|3[01])\\.|::1|0\\.0|255\\.|169\\.254\\.)') { ` +
+        `    [void]$ips.Add($dst) ` +
+        `  } ` +
+        `} ` +
+      `} catch { $err = $_.Exception.Message }; ` +
+      `$out = @{ ips = if ($ips.Count -gt 0) { [string[]]$ips } else { @() }; err = $err }; ` +
+      `$out | ConvertTo-Json -Compress`
+    )
+
+    // 4. Match new IPs against cached AWS CIDRs and accumulate
+    try {
+      const raw = JSON.parse(evtRes.stdout.trim()) as { ips: string[]; err: string | null }
+      const newIps: string[] = Array.isArray(raw.ips) ? raw.ips : []
+
+      // Surface Security log errors once per DBD session
+      if (raw.err && !udpMonitor.loggedSecErr) {
+        udpMonitor.loggedSecErr = true
+        // "No events found" is normal (no new connections), only log real errors
+        if (!raw.err.toLowerCase().includes('no events') && !raw.err.toLowerCase().includes('no matching')) {
+          log('warning', `[UDP] Security log: ${raw.err}`)
+        }
+      }
+      if (!raw.err) udpMonitor.loggedSecErr = false
+
+      if (newIps.length > 0) {
+        const regionCidrs: Array<{ regionId: string; cidrs: string[] }> = []
+        for (const regionId of REGION_IDS) {
+          const cidrs = await getCachedCidrs(regionId)
+          if (cidrs) regionCidrs.push({ regionId, cidrs })
+        }
+
+        function ipToInt(ip: string): number {
+          return ip.split('.').reduce((acc, oct) => ((acc << 8) | parseInt(oct, 10)) >>> 0, 0)
+        }
+        function ipInCidr(ip: string, cidr: string): boolean {
+          const [network, bits] = cidr.split('/')
+          const prefix = parseInt(bits, 10)
+          if (prefix === 0) return true
+          const mask = (0xFFFFFFFF << (32 - prefix)) >>> 0
+          return (ipToInt(ip) & mask) === (ipToInt(network) & mask)
+        }
+
+        for (const ip of newIps) {
+          if (udpMonitor.regionMap.has(ip)) continue
+          for (const { regionId, cidrs } of regionCidrs) {
+            let matched = false
+            for (const cidr of cidrs) {
+              if (ipInCidr(ip, cidr)) {
+              udpMonitor.regionMap.set(ip, regionId)
+              log('success', `[UDP] Game server detected: ${regionId} (${ip})`)
+              matched = true; break
+            }
+            }
+            if (matched) break
+          }
+        }
+      }
+    } catch { /* parse error */ }
+
+    // 5. Build unique-per-region list (first IP seen per region)
+    const regionToIp = new Map<string, string>()
+    for (const [ip, regionId] of udpMonitor.regionMap) {
+      if (!regionToIp.has(regionId)) regionToIp.set(regionId, ip)
+    }
+    const udpRegions = [...regionToIp.entries()].map(([regionId, ip]) => ({ regionId, ip }))
+
+    return { running: true, udpRegions }
+  })
+
+  // ── Reset UDP monitor (clear accumulated game servers) ─────────────────────
+  ipcMain.handle('reset-udp-monitor', () => {
+    udpMonitor.regionMap.clear()
+    log('info', '[UDP] Game server list cleared')
   })
 
   // ── Settings: permanent regions ────────────────────────────────────────────

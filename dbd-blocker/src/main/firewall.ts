@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
-import { getExePath } from './settings'
+import { getExePath, validateExePath } from './settings'
 
 const execFileAsync = promisify(execFile)
 
@@ -30,7 +30,7 @@ export const ruleName = (regionId: string): string => {
 }
 
 // ---------------------------------------------------------------------------
-// PowerShell helper
+// PowerShell helper (still needed for ipc.ts / firewall queries)
 // ---------------------------------------------------------------------------
 
 export async function ps(command: string): Promise<{ ok: boolean; stdout: string; stderr: string }> {
@@ -52,24 +52,39 @@ export async function ps(command: string): Promise<{ ok: boolean; stdout: string
 }
 
 // ---------------------------------------------------------------------------
-// Rule operations
+// Registry path where Windows Firewall stores its rules
+// Bypasses the broken Windows Defender Firewall management API (WMI/COM/netsh)
+// ---------------------------------------------------------------------------
+
+const REG_KEY = 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules'
+
+// ---------------------------------------------------------------------------
+// Rule operations — direct registry read/write via reg.exe + PowerShell
 // ---------------------------------------------------------------------------
 
 export async function ruleExists(regionId: string): Promise<boolean> {
   const name = ruleName(regionId)
-  const { stdout } = await ps(
-    `Get-NetFirewallRule -DisplayName "${name}" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DisplayName`
-  )
-  return stdout.includes(name)
+  try {
+    const { stdout } = await execFileAsync(
+      'reg', ['query', REG_KEY, '/v', name],
+      { timeout: 10_000 }
+    )
+    return stdout.includes(name)
+  } catch {
+    return false
+  }
 }
 
 async function removeRule(regionId: string): Promise<void> {
   const name = ruleName(regionId)
-  await ps(`Remove-NetFirewallRule -DisplayName "${name}" -ErrorAction SilentlyContinue`)
+  await execFileAsync(
+    'reg', ['delete', REG_KEY, '/v', name, '/f'],
+    { timeout: 10_000 }
+  ).catch(() => { /* no rule to delete is not an error */ })
 }
 
 // ---------------------------------------------------------------------------
-// Block a region (2-step creation — mandatory, lesson from original PS scripts)
+// Block a region — write directly to Windows Firewall registry
 // ---------------------------------------------------------------------------
 
 export async function blockRegion(
@@ -80,71 +95,83 @@ export async function blockRegion(
   const name = ruleName(regionId)
 
   // Step 1 — Preventive cleanup
-  log('step', `[${regionId}] [1/4] Preventive cleanup...`)
+  log('step', `[${regionId}] [1/3] Preventive cleanup...`)
   if (await ruleExists(regionId)) {
     await removeRule(regionId)
     if (await ruleExists(regionId)) {
       const err = 'Cannot remove residual rule'
-      log('error', `[${regionId}] ${err}`)
+      log('error', `[${regionId}] [1/3] ${err}`)
       return { ok: false, error: err }
     }
-    log('step', `[${regionId}] [1/4] Residual rule removed`)
+    log('step', `[${regionId}] [1/3] Residual rule removed`)
   } else {
-    log('step', `[${regionId}] [1/4] OK (no residual rule)`)
+    log('step', `[${regionId}] [1/3] OK (no residual rule)`)
   }
 
-  // Step 2 — Create base rule without program filter
-  log('step', `[${regionId}] [2/4] Creating base rule...`)
-  const cidrsStr = cidrs.map((c) => `"${c}"`).join(',')
-  const createCmd = [
-    `New-NetFirewallRule`,
-    `-DisplayName "${name}"`,
-    `-Direction Outbound`,
-    `-Action Block`,
-    `-Protocol Any`,
-    `-RemoteAddress @(${cidrsStr})`,
-    `-Description "Blocks DBD connections to AWS ${regionId}"`,
-    `-Enabled True`,
-    `-Profile Any`,
-    `-ErrorAction Stop | Out-Null`
-  ].join(' ')
+  // Step 2 — Write rule directly to Windows Firewall registry
+  //   Bypasses the broken WDF management API (WMI/COM/netsh all return 0x2)
+  //   MpsSvc monitors the FirewallRules registry key and enforces changes automatically
+  log('step', `[${regionId}] [2/3] Creating firewall rule...`)
 
-  const createResult = await ps(createCmd)
-  if (!createResult.ok) {
-    await removeRule(regionId)
-    const err = createResult.stderr || 'Failed to create rule'
-    log('error', `[${regionId}] [2/4] FAILED — ${err}`)
-    return { ok: false, error: err }
-  }
-  log('step', `[${regionId}] [2/4] OK`)
-
-  // Step 3 — Add program filter (separate step, mandatory)
-  log('step', `[${regionId}] [3/4] Adding program filter...`)
   const exePath = await getExePath()
-  const programCmd = [
-    `Get-NetFirewallRule -DisplayName "${name}"`,
-    `| Get-NetFirewallApplicationFilter`,
-    `| Set-NetFirewallApplicationFilter -Program "${exePath}" -ErrorAction Stop`
-  ].join(' ')
-
-  const programResult = await ps(programCmd)
-  if (!programResult.ok) {
-    await removeRule(regionId)
-    const err = programResult.stderr || 'Failed to set program filter'
-    log('error', `[${regionId}] [3/4] FAILED — ${err}`)
-    return { ok: false, error: err }
+  const exeCheck = validateExePath(exePath)
+  if (!exeCheck.ok) {
+    log('error', `[${regionId}] [2/3] FAILED — DBD exe not found: ${exeCheck.error}`)
+    log('warning', `[${regionId}] Configure the correct DBD path in Settings (⚙)`)
+    return { ok: false, error: 'DBD executable not found — open Settings and set the correct path' }
   }
-  log('step', `[${regionId}] [3/4] OK (DeadByDaylight-Win64-Shipping.exe)`)
 
-  // Step 4 — Verify
-  log('step', `[${regionId}] [4/4] Verifying...`)
+  // Build Windows Firewall registry rule string (v2.33 format)
+  // Per MS-GPFAS spec: each RA4= entry holds ONE value (range or subnet).
+  // Multiple CIDRs = multiple RA4= tokens, NOT comma-separated in one token.
+  // /32 hosts are not valid as subnet prefix (spec requires < 32) — use range format instead.
+  const raEntries = cidrs.map(cidr => {
+    if (cidr.endsWith('/32')) {
+      const ip = cidr.slice(0, -3)
+      return `RA4=${ip}-${ip}`
+    }
+    return `RA4=${cidr}`
+  }).join('|')
+
+  const ruleValue =
+    `v2.33|Action=Block|Active=TRUE|Dir=Out|` +
+    `${raEntries}|` +
+    `App=${exePath}|` +
+    `Name=${name}|Desc=|EmbedCtxt=${name}|`
+
+  log('step', `[${regionId}] [2/3] Writing ${cidrs.length} CIDRs to registry...`)
+
+  // Use reg.exe add directly — bypasses PS escaping and Set-ItemProperty subtleties
+  let createOk = false
+  let createErr = ''
+  try {
+    await execFileAsync(
+      'reg', ['add', REG_KEY, '/v', name, '/t', 'REG_SZ', '/d', ruleValue, '/f'],
+      { timeout: 30_000 }
+    )
+    createOk = true
+  } catch (err: unknown) {
+    const e = err as { stdout?: string; stderr?: string; message?: string }
+    const out = ((e.stdout ?? '') + (e.stderr ?? '')).trim()
+    createErr = out || String(err)
+  }
+
+  if (!createOk) {
+    await removeRule(regionId)
+    log('error', `[${regionId}] [2/3] FAILED — ${createErr}`)
+    return { ok: false, error: createErr || 'Registry write failed' }
+  }
+  log('step', `[${regionId}] [2/3] OK`)
+
+  // Step 3 — Verify registry entry exists
+  log('step', `[${regionId}] [3/3] Verifying...`)
   if (!(await ruleExists(regionId))) {
     await removeRule(regionId)
-    const err = 'Rule not found after creation'
-    log('error', `[${regionId}] [4/4] FAILED — ${err}`)
+    const err = 'Rule not found in registry after creation'
+    log('error', `[${regionId}] [3/3] FAILED — ${err}`)
     return { ok: false, error: err }
   }
-  log('success', `[${regionId}] [4/4] OK — rule active`)
+  log('success', `[${regionId}] [3/3] OK — rule active`)
   log('success', `[${regionId}] BLOCKED (${cidrs.length} CIDRs)`)
 
   return { ok: true }

@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Active connections
   getActiveConnections: () => ipcRenderer.invoke('get-active-connections'),
+  resetUdpMonitor:      () => ipcRenderer.invoke('reset-udp-monitor'),
 
   // Tray sync
   sendBlockedCount: (count: number) => ipcRenderer.send('blocked-count-update', count),

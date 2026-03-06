@@ -49,7 +49,8 @@ export async function fetchRegionCidrs(regionId: string): Promise<string[]> {
       (entry) =>
         entry.region === regionId &&
         entry.ip_prefix &&
-        !entry.ip_prefix.includes(':') // IPv4 only
+        !entry.ip_prefix.includes(':') && // IPv4 only
+        entry.service === 'EC2'           // EC2 only — GameLift runs on EC2; S3/CF/Route53 not needed
     )
     .map((entry) => entry.ip_prefix)
 
