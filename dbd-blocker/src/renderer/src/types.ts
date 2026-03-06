@@ -59,6 +59,12 @@ export interface ActiveConnectionsResult {
   udpRegions: UdpRegion[]
 }
 
+export interface UpdateInfo {
+  available: boolean
+  version: string
+  url: string
+}
+
 export interface ElectronAPI {
   win: {
     minimize:    () => void
@@ -69,7 +75,6 @@ export interface ElectronAPI {
   // Firewall
   blockRegion:   (regionId: string) => Promise<{ ok: boolean; error?: string }>
   unblockRegion: (regionId: string) => Promise<{ ok: boolean; error?: string }>
-  blockAll:      () => Promise<void>
   unblockAll:    () => Promise<void>
   blockExcept:   (keepRegionId: string) => Promise<void>
   getStatus:     () => Promise<Record<string, boolean>>
@@ -85,6 +90,9 @@ export interface ElectronAPI {
   getPermanentRegions: () => Promise<string[]>
   markPermanent:       (regionId: string) => Promise<void>
   unmarkPermanent:     (regionId: string) => Promise<void>
+  // Settings: exclusive region
+  getExclusiveRegion: () => Promise<string | null>
+  setExclusiveRegion: (regionId: string | null) => Promise<void>
   // Tray sync
   sendBlockedCount: (count: number) => void
   // Ping
@@ -92,6 +100,8 @@ export interface ElectronAPI {
   // Active connections
   getActiveConnections: () => Promise<ActiveConnectionsResult>
   resetUdpMonitor:      () => Promise<void>
+  // Auto-update
+  checkForUpdate: () => Promise<UpdateInfo>
   // Events
   onLog:            (callback: (entry: LogEntry) => void) => () => void
   onStatusChange:   (callback: (regionId: string, blocked: boolean) => void) => () => void

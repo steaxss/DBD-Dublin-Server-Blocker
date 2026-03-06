@@ -9,6 +9,7 @@ export const DEFAULT_DBD_EXE =
 interface AppSettings {
   exePath: string
   permanentRegions: string[]
+  exclusiveRegion: string | null
 }
 
 let cache: AppSettings | null = null
@@ -21,7 +22,7 @@ export async function getSettings(): Promise<AppSettings> {
   if (cache) return cache
   const path = getSettingsPath()
   if (!existsSync(path)) {
-    cache = { exePath: DEFAULT_DBD_EXE, permanentRegions: [] }
+    cache = { exePath: DEFAULT_DBD_EXE, permanentRegions: [], exclusiveRegion: null }
     return cache
   }
   try {
@@ -29,11 +30,12 @@ export async function getSettings(): Promise<AppSettings> {
     const parsed = JSON.parse(raw)
     cache = {
       exePath: typeof parsed.exePath === 'string' ? parsed.exePath : DEFAULT_DBD_EXE,
-      permanentRegions: Array.isArray(parsed.permanentRegions) ? parsed.permanentRegions : []
+      permanentRegions: Array.isArray(parsed.permanentRegions) ? parsed.permanentRegions : [],
+      exclusiveRegion: typeof parsed.exclusiveRegion === 'string' ? parsed.exclusiveRegion : null
     }
     return cache
   } catch {
-    cache = { exePath: DEFAULT_DBD_EXE, permanentRegions: [] }
+    cache = { exePath: DEFAULT_DBD_EXE, permanentRegions: [], exclusiveRegion: null }
     return cache
   }
 }
@@ -68,6 +70,16 @@ export async function markPermanent(regionId: string): Promise<void> {
 export async function unmarkPermanent(regionId: string): Promise<void> {
   const s = await getSettings()
   s.permanentRegions = s.permanentRegions.filter(id => id !== regionId)
+  await save()
+}
+
+export async function getExclusiveRegion(): Promise<string | null> {
+  return (await getSettings()).exclusiveRegion ?? null
+}
+
+export async function setExclusiveRegion(regionId: string | null): Promise<void> {
+  const s = await getSettings()
+  s.exclusiveRegion = regionId
   await save()
 }
 

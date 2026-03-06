@@ -13,7 +13,6 @@ contextBridge.exposeInMainWorld('api', {
   // Firewall
   blockRegion:   (regionId: string) => ipcRenderer.invoke('block-region', regionId),
   unblockRegion: (regionId: string) => ipcRenderer.invoke('unblock-region', regionId),
-  blockAll:      () => ipcRenderer.invoke('block-all'),
   unblockAll:    () => ipcRenderer.invoke('unblock-all'),
   blockExcept:   (keepRegionId: string) => ipcRenderer.invoke('block-except', keepRegionId),
   getStatus:     () => ipcRenderer.invoke('get-status'),
@@ -32,12 +31,19 @@ contextBridge.exposeInMainWorld('api', {
   markPermanent:       (regionId: string) => ipcRenderer.invoke('mark-permanent', regionId),
   unmarkPermanent:     (regionId: string) => ipcRenderer.invoke('unmark-permanent', regionId),
 
+  // Settings: exclusive region (persistent exclusive mode)
+  getExclusiveRegion: () => ipcRenderer.invoke('get-exclusive-region'),
+  setExclusiveRegion: (regionId: string | null) => ipcRenderer.invoke('set-exclusive-region', regionId),
+
   // Ping
   pingRegion: (regionId: string) => ipcRenderer.invoke('ping-region', regionId),
 
   // Active connections
   getActiveConnections: () => ipcRenderer.invoke('get-active-connections'),
   resetUdpMonitor:      () => ipcRenderer.invoke('reset-udp-monitor'),
+
+  // Auto-update
+  checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
 
   // Tray sync
   sendBlockedCount: (count: number) => ipcRenderer.send('blocked-count-update', count),

@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, app } from 'electron'
 import {
   blockRegion,
   unblockRegion,
@@ -14,8 +14,12 @@ import {
   validateExePath,
   getPermanentRegions,
   markPermanent,
-  unmarkPermanent
+  unmarkPermanent,
+  getExclusiveRegion,
+  setExclusiveRegion
 } from './settings'
+
+const GITHUB_REPO = 'steaxs/dbd-blocker'
 
 export type LogEmitter = (level: string, message: string) => void
 
@@ -83,25 +87,6 @@ export function registerIpcHandlers(win: BrowserWindow): void {
       log('error', `[${regionId}] Exception: ${error}`)
       return { ok: false, error }
     }
-  })
-
-  // ── Firewall: block all ────────────────────────────────────────────────────
-  ipcMain.handle('block-all', async () => {
-    log('info', 'Blocking all regions...')
-    for (const regionId of REGION_IDS) {
-      try {
-        const cidrs = await getCidrs(regionId)
-        if (cidrs.length === 0) {
-          log('warning', `${regionId}: skipped (no CIDRs)`)
-          continue
-        }
-        const result = await blockRegion(regionId, cidrs, log)
-        sendStatus(win, regionId, result.ok)
-      } catch (err) {
-        log('error', `[${regionId}] Exception: ${String(err)}`)
-      }
-    }
-    log('success', 'Block All complete')
   })
 
   // ── Firewall: unblock all (respects permanent regions) ────────────────────
@@ -431,5 +416,53 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle('unmark-permanent', async (_, regionId: string) => {
     await unmarkPermanent(regionId)
     log('info', `[${regionId}] Permanent flag removed — rule will be cleared on app close`)
+  })
+
+  // ── Settings: exclusive region (permanent exclusive mode) ──────────────────
+  ipcMain.handle('get-exclusive-region', async () => getExclusiveRegion())
+
+  ipcMain.handle('set-exclusive-region', async (_, regionId: string | null) => {
+    await setExclusiveRegion(regionId)
+    if (regionId) {
+      log('warning', `[${regionId}] Exclusive mode saved — will be restored on next launch`)
+    } else {
+      log('info', 'Exclusive mode unsaved')
+    }
+  })
+
+  // ── Auto-update: check GitHub releases ─────────────────────────────────────
+  ipcMain.handle('check-for-update', async () => {
+    try {
+      const { default: https } = await import('https')
+      const current = app.getVersion()
+
+      const data = await new Promise<string>((resolve, reject) => {
+        https.get(
+          `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
+          { headers: { 'User-Agent': 'dbd-blocker' } },
+          (res) => {
+            let body = ''
+            res.on('data', (chunk) => (body += chunk))
+            res.on('end', () => resolve(body))
+          }
+        ).on('error', reject)
+      })
+
+      const release = JSON.parse(data) as { tag_name: string; prerelease: boolean; html_url: string }
+
+      if (release.prerelease) return { available: false, version: current, url: '' }
+
+      const latest = release.tag_name.replace(/^v/, '')
+
+      // Simple semver compare: split by dots and compare numerically
+      const toNum = (v: string) => v.split('.').map(n => parseInt(n, 10) || 0)
+      const [ca, cb, cc] = toNum(current)
+      const [la, lb, lc] = toNum(latest)
+      const newer = la > ca || (la === ca && lb > cb) || (la === ca && lb === cb && lc > cc)
+
+      return { available: newer, version: latest, url: release.html_url }
+    } catch {
+      return { available: false, version: app.getVersion(), url: '' }
+    }
   })
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, ShieldOff, ShieldCheck, AlertTriangle, Settings, X, FolderOpen, Target, LayoutGrid, Globe2, Wifi, Activity } from 'lucide-react'
+import { RefreshCw, ShieldOff, AlertTriangle, Settings, X, FolderOpen, Target, LayoutGrid, Globe2, Wifi, Activity, Pin, PinOff, Download } from 'lucide-react'
 import { useAppState } from './hooks/useAppState'
 import { Titlebar } from './components/Header'
 import { RegionGrid } from './components/RegionGrid'
@@ -20,6 +20,8 @@ export default function App() {
     blockedCount,
     permanentRegions,
     exclusiveRegion,
+    isExclusiveSaved,
+    updateInfo,
     exePath,
     initDone,
     initSteps,
@@ -27,11 +29,12 @@ export default function App() {
     refreshCooldown,
     blockRegion,
     unblockRegion,
-    blockAll,
     unblockAll,
     refreshIps,
     activateExclusive,
     deactivateExclusive,
+    saveExclusive,
+    unsaveExclusive,
     markRegionPermanent,
     unmarkRegionPermanent,
     updateExePath,
@@ -123,6 +126,29 @@ export default function App() {
 
       {/* Titlebar — Windows controls */}
       <Titlebar />
+
+      {/* Update banner */}
+      {updateInfo?.available && (
+        <div
+          className="shrink-0 flex items-center justify-between px-6 py-2 relative z-40"
+          style={{ background: 'rgba(181,121,255,0.1)', borderBottom: '1px solid rgba(181,121,255,0.25)' }}
+        >
+          <div className="flex items-center gap-2 text-[12px]" style={{ color: '#B579FF' }}>
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-bold">v{updateInfo.version} available</span>
+            <span className="text-white/40 font-medium">— a new version of DBD Server Blocker is ready</span>
+          </div>
+          <a
+            href={updateInfo.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all hover:-translate-y-px"
+            style={{ background: 'rgba(181,121,255,0.15)', border: '1px solid rgba(181,121,255,0.35)', color: '#B579FF' }}
+          >
+            Download
+          </a>
+        </div>
+      )}
 
       {/* Header */}
       <div
@@ -231,6 +257,7 @@ export default function App() {
               >
                 <Target className="w-3.5 h-3.5" />
                 Exclusive: {REGIONS.find(r => r.id === exclusiveRegion)?.name ?? exclusiveRegion}
+                {isExclusiveSaved && <Pin className="w-3 h-3 ml-0.5" />}
               </div>
             )}
           </div>
@@ -292,17 +319,34 @@ export default function App() {
               Ping All
             </button>
 
-            {/* Exclusive Mode button */}
+            {/* Exclusive Mode buttons */}
             {exclusiveRegion ? (
-              <button
-                onClick={deactivateExclusive}
-                disabled={globalLoading}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-[10px] text-[13px] font-bold uppercase tracking-[0.08em] transition-all duration-200 disabled:opacity-30 hover:-translate-y-px"
-                style={{ background: 'rgba(181,121,255,0.12)', border: '2px solid rgba(181,121,255,0.35)', color: '#B579FF' }}
-              >
-                <X className="w-3.5 h-3.5" />
-                Disable Exclusive
-              </button>
+              <>
+                {/* Pin/Unpin exclusive mode */}
+                <button
+                  onClick={isExclusiveSaved ? unsaveExclusive : saveExclusive}
+                  disabled={globalLoading}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200 disabled:opacity-30 hover:-translate-y-px"
+                  style={isExclusiveSaved
+                    ? { background: 'rgba(181,121,255,0.15)', border: '2px solid rgba(181,121,255,0.45)', color: '#B579FF' }
+                    : { background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' }
+                  }
+                  title={isExclusiveSaved ? 'Unsave exclusive mode (will not persist on restart)' : 'Save exclusive mode (persists on restart)'}
+                >
+                  {isExclusiveSaved ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
+                </button>
+
+                {/* Disable Exclusive */}
+                <button
+                  onClick={deactivateExclusive}
+                  disabled={globalLoading}
+                  className="flex items-center gap-1.5 px-4 py-1.5 rounded-[10px] text-[13px] font-bold uppercase tracking-[0.08em] transition-all duration-200 disabled:opacity-30 hover:-translate-y-px"
+                  style={{ background: 'rgba(181,121,255,0.12)', border: '2px solid rgba(181,121,255,0.35)', color: '#B579FF' }}
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Disable Exclusive
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => setIsSelectingExclusive(v => !v)}
@@ -326,21 +370,6 @@ export default function App() {
             >
               <ShieldOff className="w-3.5 h-3.5" />
               Unblock All
-            </button>
-
-            <button
-              onClick={blockAll}
-              disabled={globalLoading}
-              className="flex items-center gap-1.5 px-5 py-1.5 rounded-[10px] text-[13px] font-bold uppercase tracking-[0.08em] transition-all duration-200 disabled:opacity-30 hover:-translate-y-px active:translate-y-0"
-              style={{
-                background: 'linear-gradient(135deg, #7046DA 0%, #2A175E 100%)',
-                border:     '2px solid rgba(181,121,255,0.35)',
-                color:      '#fff',
-                boxShadow:  '0 4px 12px rgba(112,70,218,0.4)',
-              }}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              Block All
             </button>
           </div>
         </div>
