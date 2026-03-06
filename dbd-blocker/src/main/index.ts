@@ -81,8 +81,14 @@ function buildTrayMenu(): void {
   tray.setContextMenu(contextMenu)
 }
 
+function getIconPath(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'icon.png')
+    : join(process.cwd(), 'resources/icon.png')
+}
+
 function createTray(): void {
-  const icon = nativeImage.createEmpty()
+  const icon = nativeImage.createFromPath(getIconPath()).resize({ width: 16, height: 16 })
   tray = new Tray(icon)
   tray.setToolTip('DBD Blocker')
   tray.on('double-click', () => {
@@ -104,6 +110,7 @@ function createWindow(): void {
     minHeight: 700,
     backgroundColor: '#09090b',
     frame: false,
+    icon: getIconPath(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
