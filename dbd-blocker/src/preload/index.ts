@@ -45,6 +45,9 @@ contextBridge.exposeInMainWorld('api', {
   // Auto-update
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
 
+  // Server status (deadbyqueue)
+  getServerStatus: () => ipcRenderer.invoke('get-server-status'),
+
   // Tray sync
   sendBlockedCount: (count: number) => ipcRenderer.send('blocked-count-update', count),
 

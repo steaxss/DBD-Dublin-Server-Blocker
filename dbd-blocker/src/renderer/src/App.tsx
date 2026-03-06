@@ -22,6 +22,7 @@ export default function App() {
     exclusiveRegion,
     isExclusiveSaved,
     updateInfo,
+    serverStatus,
     exePath,
     initDone,
     initSteps,
@@ -75,8 +76,32 @@ export default function App() {
   // Tooltip hover state for status chips
   const [hoveredChip, setHoveredChip] = useState<'blocked' | 'open' | null>(null)
 
-  // Exclusive mode — selection state
+  // Force Region mode — selection state
   const [isSelectingExclusive, setIsSelectingExclusive] = useState(false)
+
+  // Block warning modal — shown before any block action
+  const [pendingBlockAction, setPendingBlockAction] = useState<(() => Promise<void>) | null>(null)
+  const [dontShowAgain, setDontShowAgain] = useState(false)
+
+  function withBlockWarning(action: () => Promise<void>) {
+    if (localStorage.getItem('blockWarningAck') === '1') {
+      action()
+      return
+    }
+    setDontShowAgain(false)
+    setPendingBlockAction(() => action)
+  }
+
+  async function confirmBlock() {
+    if (dontShowAgain) localStorage.setItem('blockWarningAck', '1')
+    const action = pendingBlockAction
+    setPendingBlockAction(null)
+    if (action) await action()
+  }
+
+  function handleBlock(regionId: string) {
+    withBlockWarning(() => blockRegion(regionId))
+  }
 
   // Settings dialog
   const [showSettings, setShowSettings]           = useState(false)
@@ -103,9 +128,9 @@ export default function App() {
     if (result.ok) setShowExeSetupModal(false)
   }
 
-  async function handleActivateExclusive(regionId: string) {
+  function handleActivateExclusive(regionId: string) {
     setIsSelectingExclusive(false)
-    await activateExclusive(regionId)
+    withBlockWarning(() => activateExclusive(regionId))
   }
 
   // Derived lists for tooltip
@@ -256,7 +281,7 @@ export default function App() {
                 style={{ background: 'rgba(181,121,255,0.15)', color: '#B579FF', border: '1px solid rgba(181,121,255,0.35)' }}
               >
                 <Target className="w-3.5 h-3.5" />
-                Exclusive: {REGIONS.find(r => r.id === exclusiveRegion)?.name ?? exclusiveRegion}
+                Force Region: {REGIONS.find(r => r.id === exclusiveRegion)?.name ?? exclusiveRegion}
                 {isExclusiveSaved && <Pin className="w-3 h-3 ml-0.5" />}
               </div>
             )}
@@ -331,7 +356,7 @@ export default function App() {
                     ? { background: 'rgba(181,121,255,0.15)', border: '2px solid rgba(181,121,255,0.45)', color: '#B579FF' }
                     : { background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.4)' }
                   }
-                  title={isExclusiveSaved ? 'Unsave exclusive mode (will not persist on restart)' : 'Save exclusive mode (persists on restart)'}
+                  title={isExclusiveSaved ? 'Unsave Force Region (will not persist on restart)' : 'Save Force Region (persists on restart)'}
                 >
                   {isExclusiveSaved ? <Pin className="w-3.5 h-3.5" /> : <PinOff className="w-3.5 h-3.5" />}
                 </button>
@@ -344,7 +369,7 @@ export default function App() {
                   style={{ background: 'rgba(181,121,255,0.12)', border: '2px solid rgba(181,121,255,0.35)', color: '#B579FF' }}
                 >
                   <X className="w-3.5 h-3.5" />
-                  Disable Exclusive
+                  Disable Force Region
                 </button>
               </>
             ) : (
@@ -358,7 +383,7 @@ export default function App() {
                 }
               >
                 <Target className="w-3.5 h-3.5" />
-                Exclusive Mode
+                Force Region
               </button>
             )}
 
@@ -379,7 +404,7 @@ export default function App() {
       <div className="flex-1 overflow-hidden relative z-10" onClick={() => setHoveredChip(null)}>
         {view === 'connections' ? (
           <ActiveConnections
-            onBlock={blockRegion}
+            onBlock={handleBlock}
             onUnblock={unblockRegion}
             permanentRegions={permanentRegions}
             blockedRegions={regions.filter(r => r.status === 'blocked').map(r => r.id)}
@@ -390,7 +415,8 @@ export default function App() {
             permanentRegions={permanentRegions}
             exclusiveRegion={exclusiveRegion}
             isSelectingExclusive={isSelectingExclusive}
-            onBlock={blockRegion}
+            serverStatus={serverStatus}
+            onBlock={handleBlock}
             onUnblock={unblockRegion}
             onActivateExclusive={handleActivateExclusive}
             onDeactivateExclusive={deactivateExclusive}
@@ -413,10 +439,10 @@ export default function App() {
                 <div className="flex items-center gap-2.5">
                   <Target className="w-4 h-4 shrink-0" style={{ color: '#B579FF' }} />
                   <span className="text-[12px] font-bold uppercase tracking-widest" style={{ color: '#B579FF' }}>
-                    Exclusive Mode
+                    Force Region
                   </span>
                   <span className="text-[11px] text-white/40 font-medium">
-                    — click a region to keep only that server open
+                    — click a region to force DBD to connect only to that server
                   </span>
                 </div>
                 <button
@@ -436,7 +462,8 @@ export default function App() {
                 permanentRegions={permanentRegions}
                 exclusiveRegion={exclusiveRegion}
                 isSelectingExclusive={isSelectingExclusive}
-                onBlock={blockRegion}
+                serverStatus={serverStatus}
+                onBlock={handleBlock}
                 onUnblock={unblockRegion}
                 onMarkPermanent={markRegionPermanent}
                 onUnmarkPermanent={unmarkRegionPermanent}
@@ -450,6 +477,97 @@ export default function App() {
 
       {/* Console */}
       <ConsolePanel logs={logs} onClear={clearLogs} />
+
+      {/* ── Block warning modal (shown before any block action) ── */}
+      {pendingBlockAction && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)' }}
+        >
+          <div
+            className="rounded-2xl p-8 w-[520px]"
+            style={{ background: 'rgba(18,18,18,0.99)', outline: '1px solid rgba(244,67,54,0.2)', outlineOffset: '-1px', boxShadow: '0 24px 80px rgba(0,0,0,0.9)' }}
+          >
+            {/* Header */}
+            <div className="flex items-start gap-4 mb-6">
+              <div
+                className="w-11 h-11 rounded-xl shrink-0 flex items-center justify-center"
+                style={{ background: 'rgba(244,67,54,0.1)', border: '1px solid rgba(244,67,54,0.3)' }}
+              >
+                <AlertTriangle className="w-5 h-5" style={{ color: '#F44336' }} />
+              </div>
+              <div>
+                <h2 className="text-[1rem] font-bold text-white mb-1">Before you block</h2>
+                <p className="text-[12px] text-white/40 leading-relaxed">
+                  Blocking a region prevents DBD from connecting to those servers. For this to work reliably, read the following.
+                </p>
+              </div>
+            </div>
+
+            {/* Host requirement */}
+            <div className="mb-4 p-4 rounded-xl" style={{ background: 'rgba(244,67,54,0.07)', border: '1px solid rgba(244,67,54,0.22)' }}>
+              <p className="text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: '#F44336' }}>
+                You must be the lobby host
+              </p>
+              <p className="text-[11px] text-white/45 leading-relaxed">
+                Whether you play <strong className="text-white/70">survivor or killer</strong>, in <strong className="text-white/70">public or private matches</strong> — you must always be the lobby host for the block to take effect.
+                <br /><br />
+                In public games, <strong className="text-white/70">invite friends into your lobby</strong> rather than joining theirs. In custom games, <strong className="text-white/70">create the lobby yourself</strong>.
+                <br /><br />
+                If you are not the host, DBD may refuse the server connection and return you to the main menu.
+              </p>
+            </div>
+
+            {/* Additional notes */}
+            <div className="mb-6 p-4 rounded-xl" style={{ background: 'rgba(255,152,0,0.06)', border: '1px solid rgba(255,152,0,0.18)' }}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" style={{ color: '#FF9800' }} />
+                <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#FF9800' }}>Also keep in mind</span>
+              </div>
+              <ul className="space-y-1.5">
+                {[
+                  'If a blocked region\'s server is offline or disabled by BHVR, DBD will find the next available region.',
+                  'Use the Ping button on a region card to check whether a server is reachable before blocking others.',
+                ].map((text, i) => (
+                  <li key={i} className="flex items-start gap-2">
+                    <span className="text-[10px] font-bold mt-0.5 shrink-0" style={{ color: '#FF9800' }}>›</span>
+                    <span className="text-[11px] text-white/40 leading-relaxed">{text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Don't show again + actions */}
+            <div className="flex items-center justify-between gap-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none group">
+                <input
+                  type="checkbox"
+                  checked={dontShowAgain}
+                  onChange={e => setDontShowAgain(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-[#B579FF] cursor-pointer"
+                />
+                <span className="text-[11px] text-white/30 group-hover:text-white/50 transition-colors">Don't show again</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPendingBlockAction(null)}
+                  className="px-5 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-wider transition-all hover:-translate-y-px"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '2px solid rgba(255,255,255,0.12)', color: '#999' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmBlock}
+                  className="px-6 py-2.5 rounded-xl text-[12px] font-bold uppercase tracking-wider transition-all hover:-translate-y-px active:translate-y-0"
+                  style={{ background: 'linear-gradient(135deg, #F44336 0%, #C62828 100%)', border: '2px solid rgba(244,67,54,0.4)', color: '#fff', boxShadow: '0 4px 12px rgba(244,67,54,0.35)' }}
+                >
+                  I understand — Block
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Splash screen ── */}
       {showSplash && <SplashScreen steps={initSteps} exiting={splashExiting} />}

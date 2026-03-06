@@ -1,11 +1,11 @@
 import 'leaflet/dist/leaflet.css'
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { Shield, ShieldOff, MousePointerClick, Target, X, Wifi } from 'lucide-react'
 import { REGIONS, regionsByContinent } from '../regions'
 import { FlagIcon } from './FlagIcon'
-import type { RegionState } from '../types'
+import type { RegionState, ServerStatusMap } from '../types'
 
 const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
 
@@ -14,7 +14,7 @@ function MapEvents({ onInteract }: { onInteract: () => void }) {
   return null
 }
 
-function makeIcon(status: string, isPermanent: boolean, isSelected: boolean, isExclusive: boolean): L.DivIcon {
+function makeIcon(status: string, isPermanent: boolean, isSelected: boolean, isExclusive: boolean, isGameOffline: boolean): L.DivIcon {
   const blocked = status === 'blocked'
   const loading  = status === 'loading'
 
@@ -22,12 +22,14 @@ function makeIcon(status: string, isPermanent: boolean, isSelected: boolean, isE
                  : isPermanent && blocked     ? '#FF9800'
                  : blocked                   ? '#F44336'
                  : loading                   ? 'rgba(255,255,255,0.3)'
+                 : isGameOffline             ? '#6B7280'
                  :                             '#44FF41'
 
   const glow = isExclusive                ? 'rgba(181,121,255,0.75)'
              : isPermanent && blocked     ? 'rgba(255,152,0,0.75)'
              : blocked                   ? 'rgba(244,67,54,0.75)'
              : loading                   ? 'rgba(255,255,255,0.15)'
+             : isGameOffline             ? 'rgba(107,114,128,0.5)'
              :                             'rgba(68,255,65,0.75)'
 
   const s = isSelected || isExclusive ? 20 : 12
@@ -54,6 +56,7 @@ interface MapViewProps {
   permanentRegions:     string[]
   exclusiveRegion:      string | null
   isSelectingExclusive: boolean
+  serverStatus:         ServerStatusMap
   onBlock:              (id: string) => void
   onUnblock:            (id: string) => void
   onActivateExclusive:  (id: string) => void
@@ -67,6 +70,7 @@ export function MapView({
   permanentRegions,
   exclusiveRegion,
   isSelectingExclusive,
+  serverStatus,
   onBlock,
   onUnblock,
   onActivateExclusive,
@@ -77,7 +81,13 @@ export function MapView({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const [now, setNow] = useState(() => new Date())
   const mapDivRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const toggle = useCallback((id: string) => {
     setSelected(prev => {
@@ -129,6 +139,16 @@ export function MapView({
     return `${region.pingMs}ms`
   }
 
+  function formatQueueTime(raw: string | null): string | null {
+    if (!raw) return null
+    const s = parseInt(raw, 10)
+    if (isNaN(s)) return raw
+    if (s < 60) return `${s}s`
+    const m = Math.floor(s / 60)
+    const r = s % 60
+    return r > 0 ? `${m}m ${r}s` : `${m}m`
+  }
+
   return (
     <div className="flex h-full">
 
@@ -156,13 +176,16 @@ export function MapView({
             const isExcl   = exclusiveRegion === region.id
 
             const statusColor = isExcl ? '#B579FF' : state.status === 'blocked' ? (isPerm ? '#FF9800' : '#F44336') : '#44FF41'
-            const statusLabel = isExcl ? 'Exclusive Mode' : isPerm && state.status === 'blocked' ? 'Permanent Block' : state.status.toUpperCase()
+            const statusLabel = isExcl ? 'Force Region' : isPerm && state.status === 'blocked' ? 'Permanent Block' : state.status.toUpperCase()
+            const srv = serverStatus[region.id]
+            const qk  = srv ? formatQueueTime(srv.killerQueue)   : null
+            const qs  = srv ? formatQueueTime(srv.survivorQueue) : null
 
             return (
               <Marker
-                key={`${region.id}-${state.status}-${isPerm}-${isSel}-${isExcl}`}
+                key={`${region.id}-${state.status}-${isPerm}-${isSel}-${isExcl}-${srv?.online ?? 'x'}-${srv?.killerQueue ?? ''}-${srv?.survivorQueue ?? ''}`}
                 position={[region.lat, region.lng]}
-                icon={makeIcon(state.status, isPerm, isSel, isExcl)}
+                icon={makeIcon(state.status, isPerm, isSel, isExcl, srv !== undefined && !srv.online && state.status !== 'blocked')}
                 eventHandlers={{
                   click: () => handleMarkerClick(region.id),
                   mouseover: (e) => {
@@ -180,7 +203,7 @@ export function MapView({
               >
                 {/* Click popup — full detail */}
                 {!isSelectingExclusive && (
-                  <Popup autoPan={false} minWidth={210} maxWidth={260}>
+                  <Popup autoPan={false} minWidth={230} maxWidth={290}>
                     <div style={{ padding: '14px 16px 12px', fontFamily: 'Poppins, sans-serif' }}>
                       {/* Server ID */}
                       <div style={{ fontFamily: 'Poppins, sans-serif', fontSize: 10, fontWeight: 800, color: 'rgba(181,121,255,0.9)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
@@ -211,8 +234,51 @@ export function MapView({
 
                       {/* Ping result */}
                       {state.pingMs !== undefined && (
-                        <div style={{ fontSize: 11, fontFamily: 'Poppins, sans-serif', fontWeight: 700, color: pingColor(state), marginBottom: 8 }}>
+                        <div style={{ fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 700, color: pingColor(state), marginBottom: 8 }}>
                           Ping: {state.pingMs === null ? 'Timeout' : `${state.pingMs}ms`}
+                        </div>
+                      )}
+
+                      {/* Game server status */}
+                      {srv && (
+                        <div style={{
+                          marginBottom: 10,
+                          padding: '8px 10px',
+                          borderRadius: 10,
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          fontFamily: 'Inter, sans-serif',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: srv.online && (qk || qs) ? 6 : 0 }}>
+                            <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>Game Server</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <div style={{
+                                width: 7, height: 7, borderRadius: '50%',
+                                background: srv.online ? '#44FF41' : '#F44336',
+                                boxShadow: srv.online ? '0 0 6px rgba(68,255,65,0.9)' : '0 0 6px rgba(244,67,54,0.8)',
+                                flexShrink: 0,
+                              }} />
+                              <span style={{ fontSize: 12, fontWeight: 700, color: srv.online ? '#44FF41' : '#F44336', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                {srv.online ? 'Online' : 'Offline'}
+                              </span>
+                            </div>
+                          </div>
+                          {srv.online && (qk || qs) && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                              {qk && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 400 }}>Killer queue</span>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>{qk}</span>
+                                </div>
+                              )}
+                              {qs && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 400 }}>Survivor queue</span>
+                                  <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>{qs}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -254,8 +320,13 @@ export function MapView({
 
         {/* Custom hover tooltip — React overlay, position fixed above marker */}
         {hoveredRegion && (() => {
-          const hr = REGIONS.find(r => r.id === hoveredRegion)
+          const hr  = REGIONS.find(r => r.id === hoveredRegion)
           if (!hr) return null
+          const hsrv = serverStatus[hr.id]
+          const hqk  = hsrv ? formatQueueTime(hsrv.killerQueue)   : null
+          const hqs  = hsrv ? formatQueueTime(hsrv.survivorQueue) : null
+          const localTime = new Intl.DateTimeFormat('en-GB', { timeZone: hr.timezone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(now)
+          const localDate = new Intl.DateTimeFormat('en-GB', { timeZone: hr.timezone, weekday: 'short', day: 'numeric', month: 'short' }).format(now)
           return (
             <div
               style={{
@@ -267,27 +338,85 @@ export function MapView({
                 pointerEvents: 'none',
                 background: 'rgba(12,12,12,0.97)',
                 border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 10,
-                padding: '8px 12px',
+                borderRadius: 12,
+                padding: '10px 14px',
                 boxShadow: '0 6px 24px rgba(0,0,0,0.7)',
-                fontFamily: 'Poppins, sans-serif',
-                minWidth: 160,
+                fontFamily: 'Inter, sans-serif',
+                minWidth: 190,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+              {/* Flag + name + country */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <FlagIcon
                   code={hr.countryCode}
-                  style={{ width: 22, height: 'auto', borderRadius: 3, display: 'block', flexShrink: 0 }}
+                  style={{ width: 24, height: 'auto', borderRadius: 3, display: 'block', flexShrink: 0 }}
                   fallback={hr.flag}
                 />
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', lineHeight: 1.2 }}>{hr.name}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>{hr.country}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{hr.country}</div>
                 </div>
               </div>
-              <div style={{ fontWeight: 700, fontSize: 10, color: 'rgba(181,121,255,0.85)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+
+              {/* Region ID */}
+              <div style={{ fontWeight: 700, fontSize: 10, color: 'rgba(181,121,255,0.85)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
                 {hr.id}
               </div>
+
+              {/* Local time */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: hsrv ? 8 : 0 }}>
+                <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.78)', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em' }}>
+                  {localTime}
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.28)' }}>
+                  {localDate}
+                </span>
+              </div>
+
+              {/* Game server status */}
+              {hsrv && (
+                <div style={{
+                  borderTop: '1px solid rgba(255,255,255,0.07)',
+                  paddingTop: 8,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 5,
+                }}>
+                  {/* Online / Offline */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>Game Server</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <div style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: hsrv.online ? '#44FF41' : '#6B7280',
+                        boxShadow: hsrv.online ? '0 0 6px rgba(68,255,65,0.9)' : 'none',
+                        flexShrink: 0,
+                      }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: hsrv.online ? '#44FF41' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        {hsrv.online ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Queue times */}
+                  {hsrv.online && (hqk || hqs) && (
+                    <>
+                      {hqk && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Killer queue</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{hqk}</span>
+                        </div>
+                      )}
+                      {hqs && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Survivor queue</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{hqs}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )
         })()}
@@ -299,12 +428,13 @@ export function MapView({
         >
           {[
             { color: '#44FF41',  label: 'Open' },
+            { color: '#6B7280',  label: 'Game Offline', noGlow: true },
             { color: '#F44336',  label: 'Blocked' },
             { color: '#FF9800',  label: 'Permanent' },
-            { color: '#B579FF',  label: 'Exclusive' },
-          ].map(({ color, label }) => (
+            { color: '#B579FF',  label: 'Force Region' },
+          ].map(({ color, label, noGlow }) => (
             <div key={label} className="flex items-center gap-2">
-              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
+              <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: color, boxShadow: noGlow ? 'none' : `0 0 6px ${color}` }} />
               <span className="text-[10px] font-semibold text-white/50 uppercase tracking-wider">{label}</span>
             </div>
           ))}
@@ -318,7 +448,7 @@ export function MapView({
           >
             <Target className="w-3.5 h-3.5" style={{ color: '#B579FF' }} />
             <span className="text-[11px] font-bold uppercase tracking-wider" style={{ color: '#B579FF' }}>
-              Click a server to activate Exclusive Mode
+              Click a server to activate Force Region
             </span>
           </div>
         )}
@@ -360,7 +490,7 @@ export function MapView({
           >
             <Target className="w-3 h-3 shrink-0" style={{ color: '#B579FF' }} />
             <div className="flex-1 min-w-0">
-              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#B579FF' }}>Exclusive Mode</div>
+              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#B579FF' }}>Force Region</div>
               <div className="text-[10px] text-white/40 truncate">{REGIONS.find(r => r.id === exclusiveRegion)?.name}</div>
             </div>
             <button
@@ -377,7 +507,7 @@ export function MapView({
         <div className="px-4 py-2.5 border-b border-white/[0.05] flex items-center justify-between">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
             {isSelectingExclusive
-              ? 'Click server to select'
+              ? 'Click server to force'
               : selectedCount > 0
               ? `${selectedCount} selected`
               : 'None selected'}
