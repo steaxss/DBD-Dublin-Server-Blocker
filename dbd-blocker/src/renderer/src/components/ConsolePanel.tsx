@@ -1,5 +1,5 @@
-import { useEffect, useRef } from 'react'
-import { Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Trash2, Copy, Check } from 'lucide-react'
 import type { LogEntry } from '../types'
 
 interface ConsolePanelProps {
@@ -27,6 +27,15 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
   const bottomRef    = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const stickRef     = useRef(true)
+  const [copied, setCopied] = useState(false)
+
+  const copyLogs = () => {
+    const text = logs.map(e => `[${e.timestamp}] ${LEVEL_TAG[e.level] ?? '?'} ${e.message}`).join('\n')
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   useEffect(() => {
     if (stickRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -53,13 +62,23 @@ export function ConsolePanel({ logs, onClear }: ConsolePanelProps) {
             <span className="text-[9px] text-white/20 font-mono">{logs.length}</span>
           )}
         </div>
-        <button
-          onClick={onClear}
-          className="flex items-center gap-1 text-[10px] text-white/25 hover:text-white/60 transition-colors uppercase tracking-wider font-semibold"
-        >
-          <Trash2 className="w-3 h-3" />
-          Clear
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={copyLogs}
+            disabled={logs.length === 0}
+            className="flex items-center gap-1 text-[10px] text-white/25 hover:text-white/60 transition-colors uppercase tracking-wider font-semibold disabled:opacity-30"
+          >
+            {copied ? <Check className="w-3 h-3" style={{ color: '#44FF41' }} /> : <Copy className="w-3 h-3" />}
+            {copied ? <span style={{ color: '#44FF41' }}>Copied</span> : 'Copy'}
+          </button>
+          <button
+            onClick={onClear}
+            className="flex items-center gap-1 text-[10px] text-white/25 hover:text-white/60 transition-colors uppercase tracking-wider font-semibold"
+          >
+            <Trash2 className="w-3 h-3" />
+            Clear
+          </button>
+        </div>
       </div>
 
       {/* Logs */}

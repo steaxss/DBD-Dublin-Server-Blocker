@@ -49,16 +49,14 @@ export interface PingResult {
   error?: string
 }
 
-export interface ActiveConnection {
+export interface UdpRegion {
+  regionId: string
   ip: string
-  port: number
-  protocol: 'TCP' | 'UDP'
-  regionId: string | null
 }
 
 export interface ActiveConnectionsResult {
   running: boolean
-  connections: ActiveConnection[]
+  udpRegions: UdpRegion[]
 }
 
 export interface ElectronAPI {
@@ -93,6 +91,7 @@ export interface ElectronAPI {
   pingRegion: (regionId: string) => Promise<PingResult>
   // Active connections
   getActiveConnections: () => Promise<ActiveConnectionsResult>
+  resetUdpMonitor:      () => Promise<void>
   // Events
   onLog:            (callback: (entry: LogEntry) => void) => () => void
   onStatusChange:   (callback: (regionId: string, blocked: boolean) => void) => () => void

@@ -9,8 +9,11 @@ export function Titlebar() {
 
   return (
     <div className="titlebar-drag flex items-center h-8 shrink-0 bg-[#0a0a0a] border-b border-white/[0.06] select-none">
-      {/* Drag region */}
-      <div className="flex-1" />
+      {/* App info */}
+      <div className="flex items-center gap-2 pl-3 flex-1">
+        <span className="gradient-title text-[11px] font-bold">DBD Blocker</span>
+        <span className="text-[9px] font-mono" style={{ color: 'rgba(255,255,255,0.18)' }}>v1.0.0 · by Steaxs</span>
+      </div>
 
       {/* Window controls — Windows style */}
       <div className="flex h-full no-drag">
