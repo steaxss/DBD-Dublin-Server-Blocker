@@ -1,13 +1,18 @@
 import 'leaflet/dist/leaflet.css'
 import { useState, useMemo, useCallback, useRef } from 'react'
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { Shield, ShieldOff, MousePointerClick, Target, X, Wifi } from 'lucide-react'
-import { REGIONS } from '../regions'
+import { REGIONS, regionsByContinent } from '../regions'
 import { FlagIcon } from './FlagIcon'
 import type { RegionState } from '../types'
 
 const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+
+function MapEvents({ onInteract }: { onInteract: () => void }) {
+  useMapEvents({ zoomstart: onInteract, movestart: onInteract })
+  return null
+}
 
 function makeIcon(status: string, isPermanent: boolean, isSelected: boolean, isExclusive: boolean): L.DivIcon {
   const blocked = status === 'blocked'
@@ -141,6 +146,7 @@ export function MapView({
             url={DARK_TILES}
             attribution='&copy; OpenStreetMap contributors &copy; CARTO'
           />
+          <MapEvents onInteract={() => setHoveredRegion(null)} />
 
           {REGIONS.map(region => {
             const state    = regionMap.get(region.id)
@@ -398,95 +404,112 @@ export function MapView({
           </div>
         </div>
 
-        {/* Region list */}
+        {/* Region list — grouped by continent */}
         <div className="flex-1 overflow-y-auto">
-          {REGIONS.map(region => {
-            const state     = regionMap.get(region.id)
-            const isSel     = selected.has(region.id)
-            const isPerm    = permanentRegions.includes(region.id)
-            const isExcl    = exclusiveRegion === region.id
-            const isBlocked = state?.status === 'blocked'
-            const dotColor  = isExcl ? '#B579FF' : isPerm && isBlocked ? '#FF9800' : isBlocked ? '#F44336' : '#44FF41'
-            const ping      = pingLabel(state!)
-
-            return (
-              <button
-                key={region.id}
-                onClick={() => {
-                  if (isSelectingExclusive) onActivateExclusive(region.id)
-                  else toggle(region.id)
-                }}
-                className="w-full flex items-center gap-2.5 px-4 py-2 text-left transition-all duration-100"
+          {regionsByContinent.map(({ continent, regions: contRegions }) => (
+            <div key={continent}>
+              {/* Continent header */}
+              <div
+                className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-[0.15em] sticky top-0"
                 style={{
-                  background:   isExcl ? 'rgba(181,121,255,0.1)' : isSel ? 'rgba(181,121,255,0.07)' : 'transparent',
-                  borderBottom: '1px solid rgba(255,255,255,0.03)',
-                  borderLeft:   `2px solid ${isExcl ? 'rgba(181,121,255,0.7)' : isSel ? 'rgba(181,121,255,0.55)' : 'transparent'}`,
+                  color: 'rgba(255,255,255,0.28)',
+                  background: 'rgba(10,10,10,0.97)',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                  zIndex: 1,
                 }}
-                onMouseEnter={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'rgba(255,255,255,0.025)' }}
-                onMouseLeave={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'transparent' }}
               >
-                {/* Checkbox or exclusive icon */}
-                {isExcl ? (
-                  <Target className="shrink-0 w-3.5 h-3.5" style={{ color: '#B579FF' }} />
-                ) : (
-                  <div
-                    className="shrink-0 w-3.5 h-3.5 rounded flex items-center justify-center"
-                    style={{
-                      border:     `1.5px solid ${isSel ? 'rgba(181,121,255,0.7)' : 'rgba(255,255,255,0.18)'}`,
-                      background: isSel ? 'rgba(181,121,255,0.2)' : 'transparent',
-                    }}
-                  >
-                    {isSel && <div style={{ width: 5, height: 5, borderRadius: 1, background: '#B579FF' }} />}
-                  </div>
-                )}
+                {continent}
+              </div>
 
-                {/* Flag (SVG) */}
-                <FlagIcon
-                  code={region.countryCode}
-                  style={{ width: 18, height: 'auto', borderRadius: 2, display: 'block', flexShrink: 0 }}
-                  fallback={region.flag}
-                />
+              {contRegions.map(region => {
+                const state     = regionMap.get(region.id)
+                const isSel     = selected.has(region.id)
+                const isPerm    = permanentRegions.includes(region.id)
+                const isExcl    = exclusiveRegion === region.id
+                const isBlocked = state?.status === 'blocked'
+                const dotColor  = isExcl ? '#B579FF' : isPerm && isBlocked ? '#FF9800' : isBlocked ? '#F44336' : '#44FF41'
+                const ping      = pingLabel(state!)
 
-                {/* Name + id */}
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-bold text-white/75 truncate uppercase tracking-wide">
-                    {region.name}
-                  </div>
-                  <div className="text-[9px] font-bold text-white/22 uppercase tracking-wider truncate">
-                    {region.id}
-                  </div>
-                </div>
-
-                {/* Ping result + status dot */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {ping && (
-                    <span
-                      className="text-[9px] font-bold"
-                      style={{ color: state ? pingColor(state) : 'rgba(255,255,255,0.25)' }}
-                    >
-                      {ping}
-                    </span>
-                  )}
+                return (
                   <button
-                    onClick={(e) => { e.stopPropagation(); onPingRegion(region.id) }}
-                    disabled={state?.pingLoading}
-                    className="w-4 h-4 flex items-center justify-center rounded transition-colors hover:text-white/60 disabled:opacity-30"
-                    style={{ color: 'rgba(255,255,255,0.2)' }}
-                    title="Ping server"
+                    key={region.id}
+                    onClick={() => {
+                      if (isSelectingExclusive) onActivateExclusive(region.id)
+                      else toggle(region.id)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2 text-left transition-all duration-100"
+                    style={{
+                      background:   isExcl ? 'rgba(181,121,255,0.1)' : isSel ? 'rgba(181,121,255,0.07)' : 'transparent',
+                      borderBottom: '1px solid rgba(255,255,255,0.03)',
+                      borderLeft:   `2px solid ${isExcl ? 'rgba(181,121,255,0.7)' : isSel ? 'rgba(181,121,255,0.55)' : 'transparent'}`,
+                    }}
+                    onMouseEnter={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'rgba(255,255,255,0.025)' }}
+                    onMouseLeave={e => { if (!isSel && !isExcl) e.currentTarget.style.background = 'transparent' }}
                   >
-                    <Wifi className="w-2.5 h-2.5" />
+                    {/* Checkbox or exclusive icon */}
+                    {isExcl ? (
+                      <Target className="shrink-0 w-3.5 h-3.5" style={{ color: '#B579FF' }} />
+                    ) : (
+                      <div
+                        className="shrink-0 w-3.5 h-3.5 rounded flex items-center justify-center"
+                        style={{
+                          border:     `1.5px solid ${isSel ? 'rgba(181,121,255,0.7)' : 'rgba(255,255,255,0.18)'}`,
+                          background: isSel ? 'rgba(181,121,255,0.2)' : 'transparent',
+                        }}
+                      >
+                        {isSel && <div style={{ width: 5, height: 5, borderRadius: 1, background: '#B579FF' }} />}
+                      </div>
+                    )}
+
+                    {/* Flag (SVG) */}
+                    <FlagIcon
+                      code={region.countryCode}
+                      style={{ width: 18, height: 'auto', borderRadius: 2, display: 'block', flexShrink: 0 }}
+                      fallback={region.flag}
+                    />
+
+                    {/* Name + id */}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[11px] font-bold text-white/75 truncate uppercase tracking-wide">
+                        {region.name}
+                      </div>
+                      <div className="text-[9px] font-bold text-white/22 uppercase tracking-wider truncate">
+                        {region.id}
+                      </div>
+                    </div>
+
+                    {/* Ping result + status dot */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {ping && (
+                        <span
+                          className="text-[9px] font-bold"
+                          style={{ color: state ? pingColor(state) : 'rgba(255,255,255,0.25)' }}
+                        >
+                          {ping}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onPingRegion(region.id) }}
+                        disabled={state?.pingLoading}
+                        className="w-4 h-4 flex items-center justify-center rounded transition-colors hover:text-white/60 disabled:opacity-30"
+                        style={{ color: 'rgba(255,255,255,0.2)' }}
+                        title="Ping server"
+                      >
+                        <Wifi className="w-2.5 h-2.5" />
+                      </button>
+                      {isPerm && isBlocked && (
+                        <span className="text-[8px] font-bold px-1 py-px rounded" style={{ background: 'rgba(255,152,0,0.12)', color: '#FF9800' }}>P</span>
+                      )}
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{ background: dotColor, boxShadow: `0 0 5px ${dotColor}` }}
+                      />
+                    </div>
                   </button>
-                  {isPerm && isBlocked && (
-                    <span className="text-[8px] font-bold px-1 py-px rounded" style={{ background: 'rgba(255,152,0,0.12)', color: '#FF9800' }}>P</span>
-                  )}
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ background: dotColor, boxShadow: `0 0 5px ${dotColor}` }}
-                  />
-                </div>
-              </button>
-            )
-          })}
+                )
+              })}
+            </div>
+          ))}
         </div>
 
         {/* Action footer */}
