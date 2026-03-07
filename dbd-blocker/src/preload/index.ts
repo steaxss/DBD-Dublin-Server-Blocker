@@ -17,7 +17,7 @@ contextBridge.exposeInMainWorld('api', {
   blockExcept:   (keepRegionId: string) => ipcRenderer.invoke('block-except', keepRegionId),
   getStatus:     () => ipcRenderer.invoke('get-status'),
   getCidrCounts: () => ipcRenderer.invoke('get-cidr-counts'),
-  refreshIps:    (force: boolean) => ipcRenderer.invoke('refresh-ips', force),
+  refreshIps:    () => ipcRenderer.invoke('refresh-ips'),
   isAdmin:       () => ipcRenderer.invoke('is-admin'),
   checkExePath:  () => ipcRenderer.invoke('check-exe-path'),
 

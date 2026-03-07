@@ -88,6 +88,19 @@ export async function getCidrs(regionId: string, forceRefresh = false): Promise<
   return cidrs
 }
 
+export async function fetchAndDiffCidrs(
+  regionId: string
+): Promise<{ cidrs: string[]; added: number; removed: number }> {
+  const old = await getCachedCidrs(regionId)
+  const oldSet = new Set(old ?? [])
+  const cidrs = await fetchRegionCidrs(regionId)
+  await cacheCidrs(regionId, cidrs)
+  const newSet = new Set(cidrs)
+  const added = cidrs.filter((c) => !oldSet.has(c)).length
+  const removed = (old ?? []).filter((c) => !newSet.has(c)).length
+  return { cidrs, added, removed }
+}
+
 export async function getCidrCounts(
   regionIds: string[]
 ): Promise<Record<string, number>> {
