@@ -93,7 +93,7 @@ export interface ElectronAPI {
   blockExcept:   (keepRegionId: string) => Promise<void>
   getStatus:     () => Promise<Record<string, boolean>>
   getCidrCounts: () => Promise<Record<string, number>>
-  refreshIps:    (force: boolean) => Promise<void>
+  refreshIps:    () => Promise<{ added: number; removed: number }>
   isAdmin:       () => Promise<boolean>
   checkExePath:  () => Promise<ExeValidationResult>
   // Settings: exe path

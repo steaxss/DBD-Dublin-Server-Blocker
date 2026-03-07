@@ -127,21 +127,18 @@ export function useAppState() {
         setStep('settings', { status: 'done' })
       }
 
-      // Step 3 — Fetch/verify IP ranges
+      // Step 3 — Always force-fetch IP ranges on startup
       setStep('ips', { status: 'running' })
-      const counts = await window.api.getCidrCounts()
-      const noCacheIds = REGIONS.filter(r => !counts[r.id]).map(r => r.id)
-      if (noCacheIds.length > 0) {
-        addLog('info', `Fetching missing IP ranges (${noCacheIds.length} regions)...`)
-        await window.api.refreshIps(false)
-        startCooldown()
-        const newCounts = await window.api.getCidrCounts()
-        setRegions(prev => prev.map(r => ({ ...r, cidrCount: newCounts[r.id] ?? 0 })))
-        setStep('ips', { status: 'done', detail: `${REGIONS.length} regions` })
-      } else {
-        setRegions(prev => prev.map(r => ({ ...r, cidrCount: counts[r.id] ?? 0 })))
-        setStep('ips', { status: 'done', detail: 'cached' })
-      }
+      const diff = await window.api.refreshIps()
+      startCooldown()
+      const newCounts = await window.api.getCidrCounts()
+      setRegions(prev => prev.map(r => ({ ...r, cidrCount: newCounts[r.id] ?? 0 })))
+      const diffParts: string[] = []
+      if (diff.added > 0) diffParts.push(`+${diff.added} new`)
+      if (diff.removed > 0) diffParts.push(`-${diff.removed} removed`)
+      const diffStr = diffParts.length > 0 ? ` (${diffParts.join(', ')})` : ' (no changes)'
+      addLog('info', `IP ranges updated${diffStr}`)
+      setStep('ips', { status: 'done', detail: `${REGIONS.length} regions${diffStr}` })
 
       // Step 4 — Read active firewall rules
       setStep('rules', { status: 'running' })
@@ -170,6 +167,21 @@ export function useAppState() {
       // Fetch server status (non-blocking)
       window.api.getServerStatus().then(res => {
         if (res.ok) setServerStatus(res.data)
+      }).catch(() => { /* ignore */ })
+
+      // Auto-ping all regions on startup (non-blocking)
+      setRegions(prev => prev.map(r => ({ ...r, pingLoading: true, pingMs: undefined, pingIp: undefined })))
+      Promise.all(
+        REGIONS.map(async (r) => {
+          const result = await window.api.pingRegion(r.id)
+          setRegionStatus(r.id, {
+            pingLoading: false,
+            pingMs: result.ms,
+            pingIp: result.ip ?? undefined,
+          })
+        })
+      ).then(() => {
+        addLog('info', 'Ping auto-startup terminé')
       }).catch(() => { /* ignore */ })
     }
 
@@ -285,9 +297,13 @@ export function useAppState() {
     }
     addLog('info', 'Refreshing IP ranges...')
     startCooldown()
-    await window.api.refreshIps(true)
+    const diff = await window.api.refreshIps()
     const counts = await window.api.getCidrCounts()
     setRegions((prev) => prev.map((r) => ({ ...r, cidrCount: counts[r.id] ?? r.cidrCount })))
+    const parts: string[] = []
+    if (diff.added > 0) parts.push(`+${diff.added} new`)
+    if (diff.removed > 0) parts.push(`-${diff.removed} removed`)
+    addLog('success', parts.length > 0 ? `IP ranges updated: ${parts.join(', ')}` : 'IP ranges up to date — no changes')
   }, [addLog])
 
   // ── Exclusive mode ─────────────────────────────────────────────────────────

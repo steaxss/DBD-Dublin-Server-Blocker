@@ -64,6 +64,11 @@
     color: rgba(244, 67, 54, 0.8);
   }
 
+  /* Ping button tooltip */
+  .ping-btn-wrap:hover .ping-tooltip {
+    opacity: 1;
+  }
+
   /* Gradient text utilities */
   .gradient-title {
     font-family: 'Poppins', sans-serif;

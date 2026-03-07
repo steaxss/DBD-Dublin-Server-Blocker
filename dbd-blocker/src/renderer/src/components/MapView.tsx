@@ -234,8 +234,11 @@ export function MapView({
 
                       {/* Ping result */}
                       {state.pingMs !== undefined && (
-                        <div style={{ fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 700, color: pingColor(state), marginBottom: 8 }}>
-                          Ping: {state.pingMs === null ? 'Timeout' : `${state.pingMs}ms`}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontFamily: 'Inter, sans-serif', fontWeight: 500 }}>Your ping on this server</span>
+                          <span style={{ fontSize: 12, fontFamily: 'Inter, sans-serif', fontWeight: 700, color: pingColor(state) }}>
+                            {state.pingMs === null ? 'Timeout' : `${state.pingMs} ms`}
+                          </span>
                         </div>
                       )}
 
@@ -322,6 +325,7 @@ export function MapView({
         {hoveredRegion && (() => {
           const hr  = REGIONS.find(r => r.id === hoveredRegion)
           if (!hr) return null
+          const hstate = regions.find(r => r.id === hoveredRegion)
           const hsrv = serverStatus[hr.id]
           const hqk  = hsrv ? formatQueueTime(hsrv.killerQueue)   : null
           const hqs  = hsrv ? formatQueueTime(hsrv.survivorQueue) : null
@@ -338,83 +342,96 @@ export function MapView({
                 pointerEvents: 'none',
                 background: 'rgba(12,12,12,0.97)',
                 border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 12,
-                padding: '10px 14px',
+                borderRadius: 10,
+                padding: '8px 11px',
                 boxShadow: '0 6px 24px rgba(0,0,0,0.7)',
                 fontFamily: 'Inter, sans-serif',
-                minWidth: 190,
+                minWidth: 170,
+                maxWidth: 220,
               }}
             >
-              {/* Flag + name + country */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              {/* Flag + name + local time on same row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5 }}>
                 <FlagIcon
                   code={hr.countryCode}
-                  style={{ width: 24, height: 'auto', borderRadius: 3, display: 'block', flexShrink: 0 }}
+                  style={{ width: 20, height: 'auto', borderRadius: 2, display: 'block', flexShrink: 0 }}
                   fallback={hr.flag}
                 />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#fff', lineHeight: 1.2 }}>{hr.name}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', marginTop: 1 }}>{hr.country}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12, color: '#fff', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hr.name}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 1 }}>{hr.country}</div>
+                </div>
+                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)', fontVariantNumeric: 'tabular-nums' }}>{localTime}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)', marginTop: 1 }}>{localDate}</div>
                 </div>
               </div>
 
               {/* Region ID */}
-              <div style={{ fontWeight: 700, fontSize: 10, color: 'rgba(181,121,255,0.85)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 9, color: 'rgba(181,121,255,0.75)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 6 }}>
                 {hr.id}
-              </div>
-
-              {/* Local time */}
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: hsrv ? 8 : 0 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.78)', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.02em' }}>
-                  {localTime}
-                </span>
-                <span style={{ fontSize: 11, fontWeight: 500, color: 'rgba(255,255,255,0.28)' }}>
-                  {localDate}
-                </span>
               </div>
 
               {/* Game server status */}
               {hsrv && (
                 <div style={{
                   borderTop: '1px solid rgba(255,255,255,0.07)',
-                  paddingTop: 8,
+                  paddingTop: 6,
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 5,
+                  gap: 4,
                 }}>
-                  {/* Online / Offline */}
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>Game Server</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)', fontWeight: 500 }}>Game Server</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       <div style={{
-                        width: 7, height: 7, borderRadius: '50%',
+                        width: 6, height: 6, borderRadius: '50%',
                         background: hsrv.online ? '#44FF41' : '#6B7280',
-                        boxShadow: hsrv.online ? '0 0 6px rgba(68,255,65,0.9)' : 'none',
+                        boxShadow: hsrv.online ? '0 0 5px rgba(68,255,65,0.9)' : 'none',
                         flexShrink: 0,
                       }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: hsrv.online ? '#44FF41' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: hsrv.online ? '#44FF41' : '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                         {hsrv.online ? 'Online' : 'Offline'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Queue times */}
                   {hsrv.online && (hqk || hqs) && (
                     <>
                       {hqk && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Killer queue</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{hqk}</span>
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Killer queue</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>{hqk}</span>
                         </div>
                       )}
                       {hqs && (
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Survivor queue</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{hqs}</span>
+                          <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Survivor queue</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>{hqs}</span>
                         </div>
                       )}
                     </>
                   )}
+
+                  {/* Your ping — after game server block */}
+                  {hstate && hstate.pingMs !== undefined && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 1 }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Your ping</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: pingColor(hstate) }}>
+                        {hstate.pingMs === null ? 'Timeout' : `${hstate.pingMs} ms`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Your ping (no game server data) */}
+              {!hsrv && hstate && hstate.pingMs !== undefined && (
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>Your ping</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: pingColor(hstate) }}>
+                    {hstate.pingMs === null ? 'Timeout' : `${hstate.pingMs} ms`}
+                  </span>
                 </div>
               )}
             </div>

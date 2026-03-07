@@ -367,19 +367,33 @@ export function RegionCard({
 
         {/* Ping button */}
         {!isSelectingExclusive && (
-          <button
-            onClick={onPing}
-            disabled={region.pingLoading}
-            className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-wider transition-all duration-200 disabled:opacity-50"
-            style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              color: pingColor(),
-            }}
-          >
-            <Wifi className="w-3.5 h-3.5" />
-            {pingLabel()}
-          </button>
+          <div className="relative mt-2 ping-btn-wrap">
+            <button
+              onClick={onPing}
+              disabled={region.pingLoading}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-[13px] font-bold uppercase tracking-wider transition-all duration-200 disabled:opacity-50"
+              style={{
+                background: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: pingColor(),
+              }}
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              {pingLabel()}
+            </button>
+            {/* Tooltip */}
+            <div
+              className="ping-tooltip pointer-events-none absolute left-1/2 -translate-x-1/2 -top-8 opacity-0 transition-opacity duration-150 whitespace-nowrap px-2.5 py-1 rounded-lg text-[11px] font-semibold"
+              style={{
+                background: 'rgba(12,12,12,0.95)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.7)',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+              }}
+            >
+              Your ping
+            </div>
+          </div>
         )}
       </div>
     </div>

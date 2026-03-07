@@ -514,7 +514,7 @@ export default function App() {
                 <br /><br />
                 In public games, <strong className="text-white/70">invite friends into your lobby</strong> rather than joining theirs. In custom games, <strong className="text-white/70">create the lobby yourself</strong>.
                 <br /><br />
-                If you are not the host, DBD may refuse the server connection and return you to the main menu.
+                If you are not the host, DBD may refuse the server connection and return you to the lobby.
               </p>
             </div>
 
