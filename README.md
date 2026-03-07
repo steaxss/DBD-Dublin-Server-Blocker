@@ -1,104 +1,61 @@
-# DBD Dublin Server Blocker
+# DBD Server Blocker
 
-Block AWS eu-west-1 (Dublin) servers for Dead by Daylight using Windows Firewall.
+An Electron app that lets you block Dead by Daylight from connecting to specific AWS regions via Windows Firewall. Rules target the DBD executable directly — no global network impact.
 
-## Why?
+![screenshot placeholder](resources/icon.png)
 
-Some players experience better ping or prefer to avoid certain regional servers. This tool blocks Dublin datacenter IPs, forcing the game to connect to other regions.
+## Features
 
-## Files
-
-| File | Description |
-|------|-------------|
-| `Block-DBD-Dublin.ps1` | Creates firewall rule to block Dublin servers |
-| `Unblock-DBD-Dublin.ps1` | Removes the firewall rule |
-| `Verify-DBD-Dublin-Block.ps1` | Checks if the rule is active and configured correctly |
-| `eu-west-1.txt` | AWS eu-west-1 IP ranges (IPv4 only) |
-| `update-ips.py` | Fetches latest AWS IP ranges and updates `eu-west-1.txt` |
+- Block / unblock individual AWS regions with one click
+- **Permanent mode** — rules survive app restarts
+- **Exclusive mode** — allow only one region, block all others
+- Live ping display per region
+- Auto-fetches latest AWS IP ranges on startup
+- System tray integration
 
 ## Requirements
 
 - Windows 10/11
-- Administrator privileges
-- PowerShell 5.1+
+- Administrator privileges (required for firewall rules)
+- Node.js 18+ (for development)
 
 ## Usage
 
-### Update IP List (recommended before blocking)
+Download the latest release from the [Releases](../../releases) page and run the installer. The app requires admin privileges to manage firewall rules.
 
-AWS IP ranges change over time. Run this first to get the latest list:
+## Development
 
 ```bash
-python update-ips.py
+npm install
+npm run dev      # start in dev mode
+npm run build    # build distributable
 ```
-
-### Block Dublin Servers
-
-```powershell
-.\Block-DBD-Dublin.ps1
-```
-
-### Unblock Dublin Servers
-
-```powershell
-.\Unblock-DBD-Dublin.ps1
-```
-
-### Verify Status
-
-```powershell
-.\Verify-DBD-Dublin-Block.ps1
-```
-
-**Tip:** Right-click the script and select "Run with PowerShell" for quick execution.
 
 ## How It Works
 
-The script creates an outbound firewall rule that blocks connections from `DeadByDaylight-Win64-Shipping.exe` to 320 IPv4 CIDR ranges covering AWS eu-west-1 infrastructure.
+The app fetches AWS IP ranges from the official AWS endpoint and creates outbound Windows Firewall rules scoped to `DeadByDaylight-Win64-Shipping.exe`. Only traffic from the game is affected.
 
-**Firewall Rule Details:**
-- **Name:** `Block_DBD_Dublin_eu-west-1`
-- **Direction:** Outbound
-- **Action:** Block
-- **Protocol:** Any
-- **Scope:** Dead by Daylight executable only
+**Rule naming:** `Block_DBD_{regionId}_{city}` (e.g. `Block_DBD_eu-west-1_Dublin`)
 
-## Configuration
+## AWS Regions Covered
 
-Edit the paths in the scripts if your installation differs:
-
-```powershell
-$IP_FILE_PATH = "C:\Users\steaxs\Desktop\M\block\eu-west-1.txt"
-$DBD_EXE_PATH = "C:\Program Files (x86)\Steam\steamapps\common\Dead by Daylight\DeadByDaylight\Binaries\Win64\DeadByDaylight-Win64-Shipping.exe"
-```
-
-## Troubleshooting
-
-### Script execution is disabled
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-### ERROR creating firewall rule: The system cannot find the file specified
-
-Windows Firewall's policy store is corrupted. Run the following commands in an elevated PowerShell (as Administrator), then restart your PC:
-
-```powershell
-netsh advfirewall reset
-sfc /scannow
-DISM /Online /Cleanup-Image /RestoreHealth
-```
-
-After the restart, run `Block-DBD-Dublin.ps1` again.
-
-### Can't find any games
-
-That's expected! Dublin servers are blocked. Run `Unblock-DBD-Dublin.ps1` to restore access.
-
-## Manual Verification
-
-Open "Windows Defender Firewall with Advanced Security" > Outbound Rules > Look for `Block_DBD_Dublin_eu-west-1`
+| Region | Location |
+|---|---|
+| us-east-1 | N. Virginia |
+| us-east-2 | Ohio |
+| us-west-1 | N. California |
+| us-west-2 | Oregon |
+| ca-central-1 | Canada |
+| eu-central-1 | Frankfurt |
+| eu-west-1 | Dublin |
+| eu-west-2 | London |
+| ap-south-1 | Mumbai |
+| ap-east-1 | Hong Kong |
+| ap-northeast-1 | Tokyo |
+| ap-northeast-2 | Seoul |
+| ap-southeast-1 | Singapore |
+| ap-southeast-2 | Sydney |
+| sa-east-1 | São Paulo |
 
 ## License
 

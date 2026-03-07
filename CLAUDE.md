@@ -6,36 +6,32 @@ Electron + React + TypeScript app that blocks Dead by Daylight from connecting t
 ## Architecture
 
 ```
-block/
-├── dbd-blocker/                # Electron app
-│   ├── src/
-│   │   ├── main/               # Main process (Node/Electron)
-│   │   │   ├── index.ts        # App lifecycle, tray, window
-│   │   │   ├── ipc.ts          # All IPC handlers (block, unblock, settings, etc.)
-│   │   │   ├── firewall.ts     # PowerShell firewall operations
-│   │   │   ├── ips.ts          # AWS IP range fetching + caching
-│   │   │   └── settings.ts     # User settings persistence (exe path, permanent regions)
-│   │   ├── preload/
-│   │   │   └── index.ts        # contextBridge — exposes window.api
-│   │   └── renderer/
-│   │       └── src/
-│   │           ├── App.tsx     # Root component (header, toolbar, exclusive mode, settings modal)
-│   │           ├── types.ts    # TypeScript interfaces (RegionState, ElectronAPI, etc.)
-│   │           ├── regions.ts  # Region definitions (id, name, country, flag, continent)
-│   │           ├── hooks/
-│   │           │   └── useAppState.ts  # All app state + actions
-│   │           ├── components/
-│   │           │   ├── Header.tsx      # Titlebar (Windows-style controls)
-│   │           │   ├── RegionCard.tsx  # Individual region card with toggle + permanent/exclusive states
-│   │           │   ├── RegionGrid.tsx  # Grid grouped by continent
-│   │           │   └── ConsolePanel.tsx# Log console at bottom
-│   │           └── styles/
-│   │               └── globals.css    # Tailwind + CSS utilities + design tokens
-├── Block-DBD-Dublin.ps1        # Legacy PowerShell scripts (kept for reference)
-├── Unblock-DBD-Dublin.ps1
-├── Verify-DBD-Dublin-Block.ps1
-├── blocker.py                  # Legacy Python script
-└── update-ips.py
+├── src/
+│   ├── main/               # Main process (Node/Electron)
+│   │   ├── index.ts        # App lifecycle, tray, window
+│   │   ├── ipc.ts          # All IPC handlers (block, unblock, settings, etc.)
+│   │   ├── firewall.ts     # PowerShell firewall operations
+│   │   ├── ips.ts          # AWS IP range fetching + caching
+│   │   └── settings.ts     # User settings persistence (exe path, permanent regions)
+│   ├── preload/
+│   │   └── index.ts        # contextBridge — exposes window.api
+│   └── renderer/
+│       └── src/
+│           ├── App.tsx     # Root component (header, toolbar, exclusive mode, settings modal)
+│           ├── types.ts    # TypeScript interfaces (RegionState, ElectronAPI, etc.)
+│           ├── regions.ts  # Region definitions (id, name, country, flag, continent)
+│           ├── hooks/
+│           │   └── useAppState.ts  # All app state + actions
+│           ├── components/
+│           │   ├── Header.tsx      # Titlebar (Windows-style controls)
+│           │   ├── RegionCard.tsx  # Individual region card with toggle + permanent/exclusive states
+│           │   ├── RegionGrid.tsx  # Grid grouped by continent
+│           │   └── ConsolePanel.tsx# Log console at bottom
+│           └── styles/
+│               └── globals.css    # Tailwind + CSS utilities + design tokens
+├── resources/
+│   └── icon.png
+└── package.json
 ```
 
 ## Key Technical Details
@@ -97,7 +93,6 @@ block/
 
 ## Build & Dev
 ```bash
-cd dbd-blocker
 npm run dev      # development
 npm run build    # production build
 ```
