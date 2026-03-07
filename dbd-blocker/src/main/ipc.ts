@@ -6,7 +6,7 @@ import {
   ruleExists,
   ps
 } from './firewall'
-import { getCidrs, getCidrCounts, getCachedCidrs } from './ips'
+import { getCidrs, getCidrCounts, getCachedCidrs, fetchAndDiffCidrs } from './ips'
 import { REGION_IDS } from './index'
 import {
   getExePath,
@@ -137,18 +137,24 @@ export function registerIpcHandlers(win: BrowserWindow): void {
   ipcMain.handle('get-cidr-counts', async () => getCidrCounts(REGION_IDS))
 
   // ── Refresh IPs ────────────────────────────────────────────────────────────
-  ipcMain.handle('refresh-ips', async (_, force: boolean) => {
-    log('info', `Fetching AWS IP ranges${force ? ' (forced)' : ''}...`)
+  ipcMain.handle('refresh-ips', async () => {
+    log('info', 'Fetching AWS EC2 IP ranges...')
+    let totalAdded = 0
+    let totalRemoved = 0
     for (const regionId of REGION_IDS) {
       try {
-        const cidrs = await getCidrs(regionId, force)
-        log('step', `${regionId}: ${cidrs.length} CIDRs`)
+        const { cidrs, added, removed } = await fetchAndDiffCidrs(regionId)
+        totalAdded += added
+        totalRemoved += removed
+        const diff = added || removed ? ` (+${added}/-${removed})` : ''
+        log('step', `${regionId}: ${cidrs.length} CIDRs${diff}`)
         win.webContents.send('cidr-count', regionId, cidrs.length)
       } catch (err) {
         log('error', `${regionId}: failed — ${String(err)}`)
       }
     }
     log('success', 'IP refresh complete')
+    return { added: totalAdded, removed: totalRemoved }
   })
 
   // ── Validate current exe path (without saving) ────────────────────────────
