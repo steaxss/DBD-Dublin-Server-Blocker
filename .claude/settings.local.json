@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(del:*)",
+      "Bash(find:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(npm run:*)",
+      "Bash(powershell:*)",
+      "Bash(file:*)",
+      "Bash(ls:*)",
+      "Bash(sqlite3:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(update-config)"
+    ]
+  }
+}
